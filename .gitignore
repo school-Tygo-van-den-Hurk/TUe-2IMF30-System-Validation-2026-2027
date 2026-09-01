@@ -1,3 +1,7 @@
+# PDFs
+*.pdf
+!share/assignment.pdf
+
 # Nix' results
 result
 result-*
