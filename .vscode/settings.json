@@ -1,0 +1,21 @@
+{
+    "cSpell.words": [
+        "cachix",
+        "convco",
+        "deadnix",
+        "direnv",
+        "edolstra",
+        "gitlint",
+        "mcrl",
+        "mdformat",
+        "nixfmt",
+        "nixos",
+        "nixpkgs",
+        "numtide",
+        "pkgs",
+        "shellcheck",
+        "shfmt",
+        "statix",
+        "treefmt"
+    ]
+}
