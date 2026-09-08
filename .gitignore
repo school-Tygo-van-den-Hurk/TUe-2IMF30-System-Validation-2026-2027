@@ -1,6 +1,6 @@
 # PDFs
 *.pdf
-!share/assignment.pdf
+!share/introductory-assignment.pdf
 
 # Nix' results
 result
