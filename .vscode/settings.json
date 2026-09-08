@@ -12,10 +12,14 @@
         "nixos",
         "nixpkgs",
         "numtide",
+        "pagebreak",
         "pkgs",
+        "reinsertions",
         "shellcheck",
         "shfmt",
         "statix",
-        "treefmt"
+        "stdenv",
+        "treefmt",
+        "typst"
     ]
 }

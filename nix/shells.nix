@@ -12,6 +12,7 @@
         act # Run your GitHub Actions locally
         git # Distributed version control system
         mcrl2 # Run the models we produce
+        typst # write markup for documents.
       ];
 
       buildInputs = packages ++ formatters ++ hooks;
