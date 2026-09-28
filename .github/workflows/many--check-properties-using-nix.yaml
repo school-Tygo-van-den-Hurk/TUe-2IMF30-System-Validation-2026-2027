@@ -1,0 +1,23 @@
+name: Check properties using Nix
+# Checks whether or not all properties in src hold using nix.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, master, release, development]
+    paths: ["src/**/*", "**/*.nix", "**/*.lock"]
+  push:
+    branches: [main, master, release, development]
+    paths: ["client/**/*.py", "**/*.nix", "**/*.lock"]
+
+jobs:
+  check:
+    name: Check properties
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.3.0
+      - name: Install Nix using cachix
+        uses: cachix/install-nix-action@v31.7.0
+      - name: Build using Nix
+        run: nix build --print-build-logs .#checks.x86_64-linux.properties
