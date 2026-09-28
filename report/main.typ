@@ -69,6 +69,36 @@
 
 - The machine shall report an error when storage spot $P$ is internally registered as empty but the sensors detect an item stored in $P$.
 
+= Verification
+
+#let nix = link("http://nixos.org/", "Nix");
+
+#let distribution = link(
+  "http://nixos.org/",
+  [`NixOS 26.05 (Yarara)`],
+);
+
+#let configuration = link( // TODO add commit
+  "https://github.com/Tygo-van-den-Hurk/NixOS/tree/<COMMIT>",
+  [`github:Tygo-van-den-Hurk/NixOS/<COMMIT>`],
+);
+
+#let nixpkgs = link(
+  "https://github.com/NixOS/nixpkgs/tree/d2f67949798825fe853f7c5d0492b8bf016d3f88",
+  [`github:NixOS/NixPkgs/d2f67949798825fe853f7c5d0492b8bf016d3f88`],
+);
+
+#let version = [`202507.0.1db00c84f6 (Release)`];
+
+Verification was performed inside the #nix sandbox, on the following machine:
+
+- *Kernel*: `Linux 6.18.48`
+- *Architecture*: `x86_64`
+- *Distribution*: #distribution using configuration #configuration.
+- *mCRL2 toolset*: using version #version packaged from #nixpkgs.
+
+Using this information an exact replica of the system and environment can be reconstructed.
+
 = AI Notice
 
 == Requirements
