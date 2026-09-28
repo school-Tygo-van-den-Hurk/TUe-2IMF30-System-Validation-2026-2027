@@ -1,13 +1,16 @@
 {
-  perSystem = { pkgs, ... }: rec {
+  perSystem = { pkgs, self', ... }: rec {
     packages.mcrl2 = pkgs.mcrl2;
+    packages.typst = pkgs.typst;
 
-    packages.document = pkgs.stdenv.mkDerivation rec {
-      name = "document.pdf";
+    packages.report = pkgs.stdenv.mkDerivation rec {
+      name = "report.pdf";
 
       src = ../report;
 
-      nativeBuildInputs = with pkgs; [ typst ];
+      nativeBuildInputs = with self'.packages; [
+        typst
+      ];
 
       buildPhase = /* Shell */ ''
         runHook preBuild
