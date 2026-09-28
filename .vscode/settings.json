@@ -7,7 +7,9 @@
         "direnv",
         "edolstra",
         "Festo",
+        "forall",
         "gitlint",
+        "Hurk",
         "mcrl",
         "mdformat",
         "nixfmt",
@@ -15,6 +17,7 @@
         "nixpkgs",
         "numtide",
         "pagebreak",
+        "pbes",
         "pkgs",
         "reinsertions",
         "shellcheck",
@@ -22,7 +25,9 @@
         "statix",
         "stdenv",
         "treefmt",
+        "Tygo",
         "typst",
-        "unclarity"
+        "unclarity",
+        "Yarara"
     ]
 }

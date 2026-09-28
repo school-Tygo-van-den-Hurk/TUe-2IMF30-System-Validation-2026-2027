@@ -1,0 +1,2 @@
+% The toy property to test
+[true* . request] <true* . response> true

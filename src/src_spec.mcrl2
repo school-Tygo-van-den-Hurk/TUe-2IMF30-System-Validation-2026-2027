@@ -1,0 +1,7 @@
+% Toy example to test properties
+
+act request;
+act response;
+
+proc P = request . response . P;
+init P;

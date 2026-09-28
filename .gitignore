@@ -11,3 +11,7 @@ result-*
 
 # generated pre commit hooks
 .pre-commit-config.yaml
+
+# mcrl2
+*.lps
+*.pbes
