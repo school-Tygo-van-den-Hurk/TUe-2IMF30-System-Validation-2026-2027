@@ -1,3 +1,7 @@
+% I kept a separate copy of src_spec.mcrl2 so I can collect the property work here.
+% The checks at the end are comments; the executable formula is in properties/true.mcf.
+% Modal formulas are checked separately from the mCRL2 process specification.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ItemID %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -443,3 +447,381 @@ init comm(
         EMPTY_STORAGE
     )
 );
+
+% Properties - also available as one formula in true.mcf.
+% I copied the old true.mcf and joined the checks with && to keep them in one file.
+% All P01-P09 blocks must hold; a false result alone does not say which block failed.
+% I have not compiled the model or run verification.
+%
+% I followed the code: separate storing/retrieving modes, store_item(id), and valid slot 0.
+% The report uses Working, requestStorage without an ID, and 0 for "not stored".
+% Replies use apply_display_update; receive_display_update can happen on its own.
+% The repeated action combinations include simultaneous light/display events.
+% These patterns will need updating when GripperProcess gets its behaviour.
+%
+% Jorens confirmed that recovery cancels the request: finish the current grid move,
+% then undo the request. The code only clears the UI and returns to idle so far.
+% I use recover as cancellation, not as confirmation that this rollback is finished.
+% Jorens also confirmed that releasing a held item at (0,0,0) means handoff,
+% and releasing it after reaching a slot confirms placement in that slot.
+% The reach/release behaviour is not implemented yet, so I have not encoded those checks.
+%
+% TRE01: pending - storage flow, confirmed placement and assigned-ID display are missing.
+% TRE02: pending - the full-storage check and rejection branch are missing.
+% TRE03: pending - retrieval, confirmed handoff and storage updates are missing.
+% TRE04: partial - P07 only checks a possible not-found reply for the first retrieval.
+% TRE05: pending - finishing the grid move and undoing the request are not implemented.
+% TRE06: pending - release, position and occupancy must be linked to actual behaviour.
+% TRE07: pending - there are no per-axis start/stop actions to check yet.
+% TRE08: pending - stopping a moving arm on error/emergency is not implemented.
+% TRE09: pending - error/emergency entry and movement behaviour are still missing.
+% TRE10: pending - error/emergency entry and gripper engage/release behaviour are missing.
+%
+% The source also needs its is_* equations, slot_of and get_position types reviewed.
+% These checks do not fill in the missing Machine/Gripper branches.
+%
+% P01 - No global deadlock.
+% The lights/display can keep going while Machine is stuck; P02 checks that separately.
+% (
+%   [true*]<true>true
+% )
+% &&
+%
+% P02 - The controller can still make progress from every reachable state.
+% This checks possibility, not fair scheduling or progress on every run.
+% (
+%   [true*]
+%   <true*.(
+%     (exists item: ItemID. store_item(item) || retrieve_item(item))
+%     || recover
+%     || (exists reply: DisplayState.
+%           send_display_update(reply) || apply_display_update(reply))
+%   )>true
+% )
+% &&
+%
+% P03 - Either request can be received initially, for any ItemID.
+% Receiving a request does not mean it has been accepted or completed.
+% (
+%   forall item: ItemID.
+%   (
+%     <store_item(item)>true
+%     && <retrieve_item(item)>true
+%   )
+% )
+% &&
+%
+% P04 - After a store request, a result or cancellation is possible before the next request.
+% I use recover as cancellation here; this does not check that rollback has finished.
+% (
+%   [true*]
+%   forall item: ItemID.
+%   [
+%     exists display: DisplayState, error_on, emergency_on: Bool.
+%     (
+%       store_item(item)
+%       || store_item(item) | receive_display_update(display)
+%       || store_item(item) | setErrorLight(error_on)
+%       || store_item(item) | setEmergencyLight(emergency_on)
+%       || store_item(item) | receive_display_update(display) | setErrorLight(error_on)
+%       || store_item(item) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%       || store_item(item) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%       || store_item(item) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%     )
+%   ]
+%   <
+%     !(
+%       exists other: ItemID, display: DisplayState, error_on, emergency_on: Bool.
+%       (
+%         store_item(other)
+%         || retrieve_item(other)
+%         || store_item(other) | receive_display_update(display)
+%         || retrieve_item(other) | receive_display_update(display)
+%         || store_item(other) | setErrorLight(error_on)
+%         || retrieve_item(other) | setErrorLight(error_on)
+%         || store_item(other) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | setEmergencyLight(emergency_on)
+%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on)
+%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on)
+%         || store_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%         || store_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%       )
+%     )*
+%     .
+%     (
+%       (
+%         exists reply: DisplayState, error_on, emergency_on: Bool.
+%         val(reply == operation_completed || reply == no_slot_available || reply == display_error(unexpected_occupied) || reply == display_error(drop_off_busy)) &&
+%         (
+%           apply_display_update(reply)
+%           || apply_display_update(reply) | setErrorLight(error_on)
+%           || apply_display_update(reply) | setEmergencyLight(emergency_on)
+%           || apply_display_update(reply) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         )
+%       )
+%       ||
+%       (
+%         exists display: DisplayState, error_on, emergency_on: Bool.
+%         (
+%           recover
+%           || recover | receive_display_update(display)
+%           || recover | setErrorLight(error_on)
+%           || recover | setEmergencyLight(emergency_on)
+%           || recover | receive_display_update(display) | setErrorLight(error_on)
+%           || recover | receive_display_update(display) | setEmergencyLight(emergency_on)
+%           || recover | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%           || recover | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         )
+%       )
+%     )
+%   >true
+% )
+% &&
+%
+% P05 - After a retrieval request, a result or cancellation is possible before the next request.
+% Again, recover marks cancellation, not the end of the recovery movement.
+% (
+%   [true*]
+%   forall item: ItemID.
+%   [
+%     exists display: DisplayState, error_on, emergency_on: Bool.
+%     (
+%       retrieve_item(item)
+%       || retrieve_item(item) | receive_display_update(display)
+%       || retrieve_item(item) | setErrorLight(error_on)
+%       || retrieve_item(item) | setEmergencyLight(emergency_on)
+%       || retrieve_item(item) | receive_display_update(display) | setErrorLight(error_on)
+%       || retrieve_item(item) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%       || retrieve_item(item) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%       || retrieve_item(item) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%     )
+%   ]
+%   <
+%     !(
+%       exists other: ItemID, display: DisplayState, error_on, emergency_on: Bool.
+%       (
+%         store_item(other)
+%         || retrieve_item(other)
+%         || store_item(other) | receive_display_update(display)
+%         || retrieve_item(other) | receive_display_update(display)
+%         || store_item(other) | setErrorLight(error_on)
+%         || retrieve_item(other) | setErrorLight(error_on)
+%         || store_item(other) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | setEmergencyLight(emergency_on)
+%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on)
+%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on)
+%         || store_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%         || store_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%       )
+%     )*
+%     .
+%     (
+%       (
+%         exists reply: DisplayState, error_on, emergency_on: Bool.
+%         val(reply == operation_completed || reply == item_not_found || reply == display_error(unexpected_occupied) || reply == display_error(drop_off_busy)) &&
+%         (
+%           apply_display_update(reply)
+%           || apply_display_update(reply) | setErrorLight(error_on)
+%           || apply_display_update(reply) | setEmergencyLight(emergency_on)
+%           || apply_display_update(reply) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         )
+%       )
+%       ||
+%       (
+%         exists display: DisplayState, error_on, emergency_on: Bool.
+%         (
+%           recover
+%           || recover | receive_display_update(display)
+%           || recover | setErrorLight(error_on)
+%           || recover | setEmergencyLight(emergency_on)
+%           || recover | receive_display_update(display) | setErrorLight(error_on)
+%           || recover | receive_display_update(display) | setEmergencyLight(emergency_on)
+%           || recover | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%           || recover | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         )
+%       )
+%     )
+%   >true
+% )
+% &&
+%
+% P06 - No second request before a terminal reply or cancellation.
+% This stops checking at recover; blocking requests during rollback is still pending.
+% (
+%   [
+%     true*
+%     .
+%     (
+%       exists other: ItemID, display: DisplayState, error_on, emergency_on: Bool.
+%       (
+%         store_item(other)
+%         || retrieve_item(other)
+%         || store_item(other) | receive_display_update(display)
+%         || retrieve_item(other) | receive_display_update(display)
+%         || store_item(other) | setErrorLight(error_on)
+%         || retrieve_item(other) | setErrorLight(error_on)
+%         || store_item(other) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | setEmergencyLight(emergency_on)
+%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on)
+%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on)
+%         || store_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%         || store_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%       )
+%     )
+%     .
+%     !(
+%       (
+%         exists reply: DisplayState, error_on, emergency_on: Bool.
+%         val(reply == operation_completed || reply == no_slot_available || reply == item_not_found || reply == display_error(unexpected_occupied) || reply == display_error(drop_off_busy)) &&
+%         (
+%           apply_display_update(reply)
+%           || apply_display_update(reply) | setErrorLight(error_on)
+%           || apply_display_update(reply) | setEmergencyLight(emergency_on)
+%           || apply_display_update(reply) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         )
+%       )
+%       ||
+%       (
+%         exists display: DisplayState, error_on, emergency_on: Bool.
+%         (
+%           recover
+%           || recover | receive_display_update(display)
+%           || recover | setErrorLight(error_on)
+%           || recover | setEmergencyLight(emergency_on)
+%           || recover | receive_display_update(display) | setErrorLight(error_on)
+%           || recover | receive_display_update(display) | setEmergencyLight(emergency_on)
+%           || recover | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%           || recover | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         )
+%       )
+%     )*
+%     .
+%     (
+%       exists other: ItemID, display: DisplayState, error_on, emergency_on: Bool.
+%       (
+%         store_item(other)
+%         || retrieve_item(other)
+%         || store_item(other) | receive_display_update(display)
+%         || retrieve_item(other) | receive_display_update(display)
+%         || store_item(other) | setErrorLight(error_on)
+%         || retrieve_item(other) | setErrorLight(error_on)
+%         || store_item(other) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | setEmergencyLight(emergency_on)
+%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on)
+%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on)
+%         || store_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%         || store_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%       )
+%     )
+%   ]false
+% )
+% &&
+%
+% P07 - A first retrieval from empty storage can report item_not_found.
+% This is only the initial case of TRE04, not the full requirement.
+% (
+%   forall item: ItemID.
+%   (
+%     <retrieve_item(item)>true
+%     &&
+%     [
+%       exists display: DisplayState, error_on, emergency_on: Bool.
+%       (
+%         retrieve_item(item)
+%         || retrieve_item(item) | receive_display_update(display)
+%         || retrieve_item(item) | setErrorLight(error_on)
+%         || retrieve_item(item) | setEmergencyLight(emergency_on)
+%         || retrieve_item(item) | receive_display_update(display) | setErrorLight(error_on)
+%         || retrieve_item(item) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%         || retrieve_item(item) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         || retrieve_item(item) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%       )
+%     ]
+%     <
+%       !(
+%         exists other: ItemID, display: DisplayState, error_on, emergency_on: Bool.
+%         (
+%           store_item(other)
+%           || retrieve_item(other)
+%           || store_item(other) | receive_display_update(display)
+%           || retrieve_item(other) | receive_display_update(display)
+%           || store_item(other) | setErrorLight(error_on)
+%           || retrieve_item(other) | setErrorLight(error_on)
+%           || store_item(other) | setEmergencyLight(emergency_on)
+%           || retrieve_item(other) | setEmergencyLight(emergency_on)
+%           || store_item(other) | receive_display_update(display) | setErrorLight(error_on)
+%           || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on)
+%           || store_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%           || retrieve_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
+%           || store_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%           || retrieve_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%           || store_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%           || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         )
+%       )*
+%       .
+%       (
+%         exists reply: DisplayState, error_on, emergency_on: Bool.
+%         val(reply == item_not_found) &&
+%         (
+%           apply_display_update(reply)
+%           || apply_display_update(reply) | setErrorLight(error_on)
+%           || apply_display_update(reply) | setEmergencyLight(emergency_on)
+%           || apply_display_update(reply) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%         )
+%       )
+%     >true
+%   )
+% )
+% &&
+%
+% P08 - At least one completion reply is reachable.
+% This is coverage, not proof that every request completes.
+% (
+%   <true*.(
+%     exists reply: DisplayState, error_on, emergency_on: Bool.
+%     val(reply == operation_completed) &&
+%     (
+%       apply_display_update(reply)
+%       || apply_display_update(reply) | setErrorLight(error_on)
+%       || apply_display_update(reply) | setEmergencyLight(emergency_on)
+%       || apply_display_update(reply) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%     )
+%   )>true
+% )
+% &&
+%
+% P09 - The recover action is reachable.
+% This is coverage, not proof of a completed recovery.
+% (
+%   <true*.(
+%     exists display: DisplayState, error_on, emergency_on: Bool.
+%     (
+%       recover
+%       || recover | receive_display_update(display)
+%       || recover | setErrorLight(error_on)
+%       || recover | setEmergencyLight(emergency_on)
+%       || recover | receive_display_update(display) | setErrorLight(error_on)
+%       || recover | receive_display_update(display) | setEmergencyLight(emergency_on)
+%       || recover | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%       || recover | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
+%     )
+%   )>true
+% )
+%
