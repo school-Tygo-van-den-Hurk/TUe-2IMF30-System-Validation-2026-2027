@@ -1,7 +1,445 @@
-% Toy example to test properties
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ItemID %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-act request;
-act response;
+%% An ID for an item. Must be unique.
+sort ItemID = Nat;
 
-proc P = request . response . P;
-init P;
+sort OptionalItemID = struct no_item_id | some_item_id(
+    value_some_item_id: ItemID
+);
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Slot %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+sort Slot = Nat;
+
+sort OptionalSlot = struct no_slot | some_slot(
+    value_some_slot: Slot
+);
+
+%% Gets the position of a `Slot`.
+map get_position: Slot -> Position3D;
+var slot: Slot;
+eqn get_position(slot) = position_3d(
+    slot mod 5 + 1, % (0,0,0) is the exit, so slots start at 1 for x.
+    floor(slot / 5) mod 5,
+    floor(slot / 25) mod 5
+);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Error %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% The errors that can occur during operation.
+sort Error = struct unexpected_occupied
+    | drop_off_busy
+    ;
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Axis %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% The Axis can be either the X, Y, or Z axis.
+sort Axis = struct x_axis | y_axis | z_axis;
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Direction %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% The state that the motor can be in.
+sort Direction = struct positive | negative;
+
+%% Flips the direction from positive to negative and vise versa.
+map flip: Direction -> Direction;
+eqn flip(positive) = negative;
+eqn flip(negative) = positive;
+
+% map direction_from: Nat -> Direction;
+% var number: Nat
+% eqn (number < 0) -> direction_from(number) = negative;
+% eqn (number > 0) -> direction_from(number) = positive;
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Position3D %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Coordinates in 3D space.
+sort Position3D = struct position_3d(
+    x_coordinate: Nat,
+    y_coordinate: Nat,
+    z_coordinate: Nat
+);
+
+%% The default value for a position.
+map DEFAULT_POSITION3D: Position3D;
+eqn DEFAULT_POSITION3D = position_3d(0, 0, 0);
+
+%% Calculates the distance between two 3D points with respect to the X axis.
+map x_distance: Position3D # Position3D -> Int;
+var position1, position2: Position3D;
+eqn x_distance(position1, position2) = (
+    x_coordinate(position1) - x_coordinate(position2)
+);
+
+%% Calculates the distance between two 3D points with respect to the Y axis.
+map y_distance: Position3D # Position3D -> Int;
+var position1, position2: Position3D;
+eqn y_distance(position1, position2) = (
+    y_coordinate(position1) - y_coordinate(position2)
+);
+
+%% Calculates the distance between two 3D points with respect to the Z axis.
+map z_distance: Position3D # Position3D -> Int;
+var position1, position2: Position3D;
+eqn z_distance(position1, position2) = (
+    z_coordinate(position1) - z_coordinate(position2)
+);
+
+%% Calculates the distance between two 3D points with respect to an axis.
+map distance_for_axis: Position3D # Position3D # Axis -> Int;
+var position1, position2: Position3D, axis: Axis;
+eqn distance_for_axis(position1, position2, x_axis) =
+    x_distance(position1, position2);
+var position1, position2: Position3D, axis: Axis;
+eqn distance_for_axis(position1, position2, y_axis) =
+    y_distance(position1, position2);
+var position1, position2: Position3D, axis: Axis;
+eqn distance_for_axis(position1, position2, z_axis) = 
+    z_distance(position1, position2);
+
+
+%% Calculates the manhattan distance between two 3D points.
+map manhattan_distance: Position3D # Position3D -> Int;
+var position1, position2: Position3D;
+eqn manhattan_distance(position1, position2) = (
+    x_distance(position1, position2) +
+    y_distance(position1, position2) +
+    z_distance(position1, position2)
+);
+
+%% Whether or not this position is at the belt.
+map is_at_belt: Position3D -> Bool;
+var position: Position3D;
+eqn is_at_belt(position) = (position == DEFAULT_POSITION3D);
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Storage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+sort StorageEntry = struct filled(storage_entry_item_id: Nat);
+cons empty_storage_entry: StorageEntry;
+sort Storage = Slot -> StorageEntry;
+
+map EMPTY_STORAGE: Storage;
+eqn EMPTY_STORAGE = lambda slot: Slot. empty_storage_entry;
+
+
+%% Checks if an item with id `id` is stored
+map slot_of: Storage # ItemID -> Slot;
+var storage: Storage, slot: Slot, item_id: ItemID;
+eqn slot_of(storage, item_id) = if(
+    storage_entry_item_id(storage(slot)) != item_id,
+    slot_of(storage, item_id),
+    slot
+);
+
+%% Checks if a slot of is occupied in storage.
+map is_occupied: Storage # Slot -> Bool;
+var storage: Storage, slot: Slot, entry: StorageEntry;
+eqn is_occupied(storage, slot) = storage(slot) != empty_storage_entry;
+
+%% Puts an item in storage and returns the new storage state.
+map put_item_in_slot: Storage # ItemID # Slot -> Storage;
+var storage: Storage, slot: Slot, id: ItemID;
+eqn put_item_in_slot(storage, id, slot) = storage[slot -> filled(id)];
+
+%% Puts an item in storage and returns the new storage state.
+map clear_slot: Storage # Slot -> Storage;
+var storage: Storage, slot: Slot;
+eqn clear_slot(storage, slot) = storage[slot -> empty_storage_entry];
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Movement %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% The movement that the gripper can have.
+sort Movement = struct movement(
+    movement_direction: Direction,
+    movement_axis: Axis
+);
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Light %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% The error light.
+act setErrorLight: Bool;
+proc ErrorLight(on: Bool) = sum new: Bool . (
+    setErrorLight(new) . ErrorLight(new)
+);
+
+%% The emergency light.
+act setEmergencyLight: Bool;
+proc EmergencyLight(on: Bool) = sum new: Bool . (
+    setEmergencyLight(new) . EmergencyLight(new)
+);
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Display %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+sort DisplayState = struct clear
+    | operation_completed
+    | no_slot_available
+    | item_not_found
+    | request_accepted
+    | display_error(error_for_display: Error)
+    ;
+
+%% The default for `DisplayState`.
+map DEFAULT_DISPLAY_STATE: DisplayState;
+eqn DEFAULT_DISPLAY_STATE = clear;
+
+act receive_display_update: DisplayState;
+act send_display_update: DisplayState;
+act apply_display_update: DisplayState;
+
+%% Display: awaits updates, and then applies them.
+proc DisplayProcess(display_state: DisplayState) =
+    sum new_state: DisplayState.
+        receive_display_update(new_state).
+        DisplayProcess(new_state);
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Gripper %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+sort GripperState = struct empty_gripper
+    | carrying_gripper(gripper_item: ItemID)
+    ;
+
+%% The default for `GripperState`.
+map DEFAULT_GRIPPER_STATE: GripperState;
+eqn DEFAULT_GRIPPER_STATE = empty_gripper;
+
+%% Not entirely sure about this one
+act receive_gripper_update: GripperState;
+act send_gripper_update: GripperState;
+act apply_gripper_update: GripperState;
+
+
+sort GripperMode = struct hovering(
+    gripper_mode_claw_state: GripperState,
+    gripper_mode_position: Position3D
+) | moving(
+    gripper_mode_claw_state: GripperState,
+    gripper_mode_position: Position3D,
+    gripper_instructions: List(Movement)
+);
+
+%% Whether a `GripperMode` is `hovering`.
+map is_hovering: GripperMode -> Bool;
+var gripper_mode: GripperMode;
+eqn is_hovering(gripper_mode) = false;
+var state: GripperState, position: Position3D;
+eqn is_hovering(hovering(state, position)) = true;
+
+%% Whether a `GripperMode` is `moving`.
+map is_moving: GripperMode -> Bool;
+var gripper_mode: GripperMode;
+eqn is_moving(gripper_mode) = false;
+var state: GripperState, position: Position3D, instructions: List(Movement);
+eqn is_moving(moving(state, position, instructions)) = true;
+
+%% The default for `GripperMode`.
+map DEFAULT_GRIPPER_MODE: GripperMode;
+eqn DEFAULT_GRIPPER_MODE = hovering(
+    DEFAULT_GRIPPER_STATE,
+    DEFAULT_POSITION3D
+);
+
+
+act send_move_gripper_to_belt;
+act read_move_gripper_to_belt;
+act move_gripper_to_belt;
+
+act send_move_gripper_to_slot: Slot;
+act read_move_gripper_to_slot: Slot;
+act move_gripper_to_slot: Slot;
+
+
+%% Reading the gripper sensor
+act send_gripper_sensor: Bool;
+act read_gripper_sensor: Bool;
+act use_gripper_sensor: Bool;
+
+
+%% Gripper: is responsible for keeping track of location and whether it is
+%% carrying an item inside the claw.
+proc GripperProcess(
+    mode: GripperMode
+) = (
+    (is_hovering(mode)) -> (
+        delta
+    ) <> (is_moving(mode)) -> (
+        delta
+    ) <> delta
+);
+    
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MachineMode %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Modes the machine can be in.
+sort MachineMode = struct idle_mode
+    | retrieving_mode(
+        retrieving_item_id: ItemID
+    )
+    | storing_mode(
+        storing_item_id: ItemID, 
+        storing_slot: Slot
+    )
+    | error_mode(
+        mode_error: Error
+    )
+    | emergency_mode
+    | recovery_mode
+    ;
+
+%% The default for `MachineMode`.
+map DEFAULT_MACHINE_MODE: MachineMode;
+eqn DEFAULT_MACHINE_MODE = idle_mode;
+
+%% Whether a `MachineMode` is `idle_mode`.
+map is_idle_mode: MachineMode -> Bool;
+var mode: MachineMode;
+eqn is_idle_mode(mode) = false;
+eqn is_idle_mode(idle_mode) = true;
+
+%% Whether a `MachineMode` is `retrieving_mode`.
+map is_retrieving_mode: MachineMode -> Bool;
+var mode: MachineMode;
+eqn is_retrieving_mode(mode) = false;
+var item_id: ItemID;
+eqn is_retrieving_mode(retrieving_mode(item_id)) = true;
+
+%% Whether a `MachineMode` is `storing_mode`.
+map is_storing_mode: MachineMode -> Bool;
+var mode: MachineMode;
+eqn is_storing_mode(mode) = false;
+var item_id: ItemID, slot: Slot;
+eqn is_storing_mode(storing_mode(item_id, slot)) = true;
+
+%% Whether a `MachineMode` is `error_mode`.
+map is_error_mode: MachineMode -> Bool;
+var mode: MachineMode;
+eqn is_error_mode(mode) = false;
+var error: Error;
+eqn is_error_mode(error_mode(error)) = true;
+
+%% Whether a `MachineMode` is `emergency_mode`.
+map is_emergency_mode: MachineMode -> Bool;
+var mode: MachineMode;
+eqn is_emergency_mode(mode) = false;
+eqn is_emergency_mode(emergency_mode) = true;
+
+%% Whether a `MachineMode` is `recovery_mode`.
+map is_recovery_mode: MachineMode -> Bool;
+var mode: MachineMode;
+eqn is_recovery_mode(mode) = false;
+eqn is_recovery_mode(recovery_mode) = true;
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Machine %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+act store_item: ItemID;
+act retrieve_item: ItemID;
+act recover;
+
+proc Machine(
+    mode: MachineMode,
+    storage: Storage
+) = (
+    (is_idle_mode(mode)) -> (
+        sum item: ItemID . (
+            (
+                store_item(item) .
+                Machine(
+                    storing_mode(item, 0),
+                    storage
+                )
+            ) + (
+                retrieve_item(item) .
+                Machine(
+                    retrieving_mode(item),
+                    storage
+                )
+            )
+        )
+    )
+    <> (is_recovery_mode(mode)) -> 
+        send_display_update(clear) .
+        setEmergencyLight(false) .
+        setErrorLight(false) .
+        Machine(idle_mode, storage)
+    <> (is_error_mode(mode)) -> 
+        send_display_update(display_error(mode_error(mode))) .
+        setEmergencyLight(is_emergency_mode(mode)) .
+        setErrorLight(is_error_mode(mode)) .
+        recover . Machine(recovery_mode, storage)
+    <> (is_emergency_mode(mode)) -> 
+        send_display_update(clear) .
+        setEmergencyLight(is_emergency_mode(mode)) .
+        setErrorLight(is_error_mode(mode)) .
+        recover . Machine(recovery_mode, storage)
+    <> delta
+);
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Init %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+init comm(
+    {
+        send_display_update | receive_display_update
+            -> apply_display_update,
+        send_gripper_update | receive_gripper_update
+            -> apply_gripper_update,
+        send_gripper_sensor | read_gripper_sensor
+            -> use_gripper_sensor
+    },
+    DisplayProcess(DEFAULT_DISPLAY_STATE) ||
+    GripperProcess(DEFAULT_GRIPPER_MODE) ||
+    EmergencyLight(is_emergency_mode(DEFAULT_MACHINE_MODE)) ||
+    ErrorLight(is_error_mode(DEFAULT_MACHINE_MODE)) ||
+    Machine(
+        DEFAULT_MACHINE_MODE,
+        EMPTY_STORAGE
+    )
+);
