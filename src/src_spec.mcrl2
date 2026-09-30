@@ -1,14 +1,51 @@
 %% Must be unique.
 sort ItemID = Nat;
-
-sort OptionalItemID = struct no_item_id | some_item_id(
-    value_some_item_id: ItemID
-);
-
+sort OptionalItemID = struct no_item_id | some_item_id(value_some_item_id: ItemID);
 sort Slot = Nat;
-
-sort OptionalSlot = struct no_slot | some_slot(
-    value_some_slot: Slot
+sort OptionalSlot = struct no_slot | some_slot(value_some_slot: Slot);
+%% The errors that can occur during operation.
+sort Error = struct unexpected_occupied | drop_off_busy;
+sort Axis = struct x_axis | y_axis | z_axis;
+sort Direction = struct positive | negative;
+sort Position3D = struct position_3d(
+    x_coordinate: Nat,
+    y_coordinate: Nat,
+    z_coordinate: Nat
+);
+sort DisplayState = struct clear | operation_completed | no_slot_available |
+                           item_not_found | request_accepted |
+                           display_error(error_for_display: Error);
+sort MachineMode = struct idle_mode
+    | retrieving_mode(
+        retrieving_item_id: ItemID
+    )
+    | storing_mode(
+        storing_item_id: ItemID, 
+        storing_slot: Slot
+    )
+    | error_mode(
+        mode_error: Error
+    )
+    | emergency_mode
+    | recovery_mode
+    ;
+%% NOTE(Jorens): if its a gripper movement, we can show it in the name. 
+%% The movement that the gripper can have.
+sort Movement = struct movement(
+    movement_direction: Direction,
+    movement_axis: Axis
+);
+sort StorageEntry = struct filled(storage_entry_item_id: Nat);
+cons empty_storage_entry: StorageEntry;
+sort Storage = Slot -> StorageEntry;
+sort GripperState = struct empty_gripper | carrying_gripper(gripper_item: ItemID);
+sort GripperMode = struct hovering(
+    gripper_mode_claw_state: GripperState,
+    gripper_mode_position: Position3D
+) | moving(
+    gripper_mode_claw_state: GripperState,
+    gripper_mode_position: Position3D,
+    gripper_instructions: List(Movement)
 );
 
 map get_position: Slot -> Position3D;
@@ -19,24 +56,9 @@ eqn get_position(slot) = position_3d(
     floor(slot / 25) mod 5
 );
 
-%% The errors that can occur during operation.
-sort Error = struct unexpected_occupied
-    | drop_off_busy
-    ;
-
-sort Axis = struct x_axis | y_axis | z_axis;
-
-sort Direction = struct positive | negative;
-
 map flip: Direction -> Direction;
 eqn flip(positive) = negative;
 eqn flip(negative) = positive;
-
-sort Position3D = struct position_3d(
-    x_coordinate: Nat,
-    y_coordinate: Nat,
-    z_coordinate: Nat
-);
 
 map DEFAULT_POSITION3D: Position3D;
 eqn DEFAULT_POSITION3D = position_3d(0, 0, 0);
@@ -82,10 +104,6 @@ map is_at_belt: Position3D -> Bool;
 var position: Position3D;
 eqn is_at_belt(position) = (position == DEFAULT_POSITION3D);
 
-sort StorageEntry = struct filled(storage_entry_item_id: Nat);
-cons empty_storage_entry: StorageEntry;
-sort Storage = Slot -> StorageEntry;
-
 map EMPTY_STORAGE: Storage;
 eqn EMPTY_STORAGE = lambda slot: Slot. empty_storage_entry;
 
@@ -116,64 +134,11 @@ map clear_slot: Storage # Slot -> Storage;
 var storage: Storage, slot: Slot;
 eqn clear_slot(storage, slot) = storage[slot -> empty_storage_entry];
 
-%% NOTE(Jorens): if its a gripper movement, we can show it in the name. 
-%% The movement that the gripper can have.
-sort Movement = struct movement(
-    movement_direction: Direction,
-    movement_axis: Axis
-);
-
-act setErrorLight: Bool;
-proc ErrorLight(on: Bool) = sum new: Bool . (
-    setErrorLight(new) . ErrorLight(new)
-);
-
-act setEmergencyLight: Bool;
-proc EmergencyLight(on: Bool) = sum new: Bool . (
-    setEmergencyLight(new) . EmergencyLight(new)
-);
-
-sort DisplayState = struct clear
-    | operation_completed
-    | no_slot_available
-    | item_not_found
-    | request_accepted
-    | display_error(error_for_display: Error)
-    ;
-
 map DEFAULT_DISPLAY_STATE: DisplayState;
 eqn DEFAULT_DISPLAY_STATE = clear;
 
-act receive_display_update: DisplayState;
-act send_display_update: DisplayState;
-act apply_display_update: DisplayState;
-
-%% Display: awaits updates, and then applies them.
-proc DisplayProcess(display_state: DisplayState) =
-    sum new_state: DisplayState.
-        receive_display_update(new_state).
-        DisplayProcess(new_state);
-
-sort GripperState = struct empty_gripper
-    | carrying_gripper(gripper_item: ItemID)
-    ;
-
 map DEFAULT_GRIPPER_STATE: GripperState;
 eqn DEFAULT_GRIPPER_STATE = empty_gripper;
-
-%% NOTE(Tygo): Not entirely sure about this one
-act receive_gripper_update: GripperState;
-act send_gripper_update: GripperState;
-act apply_gripper_update: GripperState;
-
-sort GripperMode = struct hovering(
-    gripper_mode_claw_state: GripperState,
-    gripper_mode_position: Position3D
-) | moving(
-    gripper_mode_claw_state: GripperState,
-    gripper_mode_position: Position3D,
-    gripper_instructions: List(Movement)
-);
 
 map is_hovering: GripperMode -> Bool;
 var gripper_mode: GripperMode;
@@ -192,45 +157,6 @@ eqn DEFAULT_GRIPPER_MODE = hovering(
     DEFAULT_GRIPPER_STATE,
     DEFAULT_POSITION3D
 );
-
-act send_move_gripper_to_belt;
-act read_move_gripper_to_belt;
-act move_gripper_to_belt;
-
-act send_move_gripper_to_slot: Slot;
-act read_move_gripper_to_slot: Slot;
-act move_gripper_to_slot: Slot;
-
-act send_gripper_sensor: Bool;
-act read_gripper_sensor: Bool;
-act use_gripper_sensor: Bool;
-
-%% Gripper: is responsible for keeping track of location and whether it is
-%% carrying an item inside the claw.
-proc GripperProcess(
-    mode: GripperMode
-) = (
-    (is_hovering(mode)) -> (
-        delta
-    ) <> (is_moving(mode)) -> (
-        delta
-    ) <> delta
-);
-    
-sort MachineMode = struct idle_mode
-    | retrieving_mode(
-        retrieving_item_id: ItemID
-    )
-    | storing_mode(
-        storing_item_id: ItemID, 
-        storing_slot: Slot
-    )
-    | error_mode(
-        mode_error: Error
-    )
-    | emergency_mode
-    | recovery_mode
-    ;
 
 map DEFAULT_MACHINE_MODE: MachineMode;
 eqn DEFAULT_MACHINE_MODE = idle_mode;
@@ -268,9 +194,59 @@ var mode: MachineMode;
 eqn is_recovery_mode(mode) = false;
 eqn is_recovery_mode(recovery_mode) = true;
 
+act setErrorLight: Bool;
+act setEmergencyLight: Bool;
+
+act receive_display_update: DisplayState;
+act send_display_update: DisplayState;
+act apply_display_update: DisplayState;
+
+%% NOTE(Tygo): Not entirely sure about this one
+act receive_gripper_update: GripperState;
+act send_gripper_update: GripperState;
+act apply_gripper_update: GripperState;
+
+act send_move_gripper_to_belt;
+act read_move_gripper_to_belt;
+act move_gripper_to_belt;
+
+act send_move_gripper_to_slot: Slot;
+act read_move_gripper_to_slot: Slot;
+act move_gripper_to_slot: Slot;
+
+act send_gripper_sensor: Bool;
+act read_gripper_sensor: Bool;
+act use_gripper_sensor: Bool;
+
 act store_item: ItemID;
 act retrieve_item: ItemID;
 act recover;
+
+proc ErrorLight(on: Bool) = sum new: Bool . (
+    setErrorLight(new) . ErrorLight(new)
+);
+
+proc EmergencyLight(on: Bool) = sum new: Bool . (
+    setEmergencyLight(new) . EmergencyLight(new)
+);
+
+%% Display: awaits updates, and then applies them.
+proc DisplayProcess(display_state: DisplayState) =
+    sum new_state: DisplayState.
+        receive_display_update(new_state).
+        DisplayProcess(new_state);
+
+%% Gripper: is responsible for keeping track of location and whether it is
+%% carrying an item inside the claw.
+proc GripperProcess(
+    mode: GripperMode
+) = (
+    (is_hovering(mode)) -> (
+        delta
+    ) <> (is_moving(mode)) -> (
+        delta
+    ) <> delta
+);
 
 proc Machine(
     mode: MachineMode,
