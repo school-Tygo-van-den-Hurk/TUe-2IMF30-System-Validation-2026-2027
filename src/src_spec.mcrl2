@@ -7,11 +7,7 @@ sort OptionalSlot = struct no_slot | some_slot(value_some_slot: Slot);
 sort Error = struct unexpected_occupied | drop_off_busy;
 sort Axis = struct x_axis | y_axis | z_axis;
 sort Direction = struct positive | negative;
-sort Position3D = struct position_3d(
-    x_coordinate: Nat,
-    y_coordinate: Nat,
-    z_coordinate: Nat
-);
+sort Position3D = struct position_3d(x_coordinate: Nat, y_coordinate: Nat, z_coordinate: Nat);
 sort DisplayState = struct clear | operation_completed | no_slot_available |
                            item_not_found | request_accepted |
                            display_error(error_for_display: Error);
@@ -31,22 +27,42 @@ sort MachineMode = struct idle_mode
     ;
 %% NOTE(Jorens): if its a gripper movement, we can show it in the name. 
 %% The movement that the gripper can have.
-sort Movement = struct movement(
-    movement_direction: Direction,
-    movement_axis: Axis
-);
+sort Movement = struct movement(movement_direction: Direction, movement_axis: Axis);
 sort StorageEntry = struct filled(storage_entry_item_id: Nat);
 cons empty_storage_entry: StorageEntry;
 sort Storage = Slot -> StorageEntry;
 sort GripperState = struct empty_gripper | carrying_gripper(gripper_item: ItemID);
-sort GripperMode = struct hovering(
-    gripper_mode_claw_state: GripperState,
-    gripper_mode_position: Position3D
-) | moving(
-    gripper_mode_claw_state: GripperState,
-    gripper_mode_position: Position3D,
-    gripper_instructions: List(Movement)
+sort GripperMode = 
+    struct hovering(
+        gripper_mode_claw_state: GripperState, gripper_mode_position: Position3D
+    ) |
+    moving(
+        gripper_mode_claw_state: GripperState,
+        gripper_mode_position: Position3D,
+        gripper_instructions: List(Movement)
+    );
+
+map DEFAULT_POSITION3D: Position3D;
+eqn DEFAULT_POSITION3D = position_3d(0, 0, 0);
+
+map EMPTY_STORAGE: Storage;
+eqn EMPTY_STORAGE = lambda slot: Slot. empty_storage_entry;
+
+map DEFAULT_DISPLAY_STATE: DisplayState;
+eqn DEFAULT_DISPLAY_STATE = clear;
+
+map DEFAULT_GRIPPER_STATE: GripperState;
+eqn DEFAULT_GRIPPER_STATE = empty_gripper;
+
+
+map DEFAULT_GRIPPER_MODE: GripperMode;
+eqn DEFAULT_GRIPPER_MODE = hovering(
+    DEFAULT_GRIPPER_STATE,
+    DEFAULT_POSITION3D
 );
+
+map DEFAULT_MACHINE_MODE: MachineMode;
+eqn DEFAULT_MACHINE_MODE = idle_mode;
 
 map get_position: Slot -> Position3D;
 var slot: Slot;
@@ -59,9 +75,6 @@ eqn get_position(slot) = position_3d(
 map flip: Direction -> Direction;
 eqn flip(positive) = negative;
 eqn flip(negative) = positive;
-
-map DEFAULT_POSITION3D: Position3D;
-eqn DEFAULT_POSITION3D = position_3d(0, 0, 0);
 
 map x_distance: Position3D # Position3D -> Int;
 var position1, position2: Position3D;
@@ -104,9 +117,6 @@ map is_at_belt: Position3D -> Bool;
 var position: Position3D;
 eqn is_at_belt(position) = (position == DEFAULT_POSITION3D);
 
-map EMPTY_STORAGE: Storage;
-eqn EMPTY_STORAGE = lambda slot: Slot. empty_storage_entry;
-
 %% Checks if an item with id `id` is stored
 map slot_of: Storage # ItemID # Slot -> OptionalSlot;
 var storage: Storage, slot: Slot, item_id: ItemID;
@@ -134,12 +144,6 @@ map clear_slot: Storage # Slot -> Storage;
 var storage: Storage, slot: Slot;
 eqn clear_slot(storage, slot) = storage[slot -> empty_storage_entry];
 
-map DEFAULT_DISPLAY_STATE: DisplayState;
-eqn DEFAULT_DISPLAY_STATE = clear;
-
-map DEFAULT_GRIPPER_STATE: GripperState;
-eqn DEFAULT_GRIPPER_STATE = empty_gripper;
-
 map is_hovering: GripperMode -> Bool;
 var gripper_mode: GripperMode;
 eqn is_hovering(gripper_mode) = false;
@@ -151,15 +155,6 @@ var gripper_mode: GripperMode;
 eqn is_moving(gripper_mode) = false;
 var state: GripperState, position: Position3D, instructions: List(Movement);
 eqn is_moving(moving(state, position, instructions)) = true;
-
-map DEFAULT_GRIPPER_MODE: GripperMode;
-eqn DEFAULT_GRIPPER_MODE = hovering(
-    DEFAULT_GRIPPER_STATE,
-    DEFAULT_POSITION3D
-);
-
-map DEFAULT_MACHINE_MODE: MachineMode;
-eqn DEFAULT_MACHINE_MODE = idle_mode;
 
 map is_idle_mode: MachineMode -> Bool;
 var mode: MachineMode;
