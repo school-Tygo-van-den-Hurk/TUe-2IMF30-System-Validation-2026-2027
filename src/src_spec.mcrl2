@@ -147,13 +147,19 @@ eqn EMPTY_STORAGE = lambda slot: Slot. empty_storage_entry;
 
 
 %% Checks if an item with id `id` is stored
-map slot_of: Storage # ItemID -> Slot;
+map slot_of: Storage # ItemID # Slot -> OptionalSlot;
 var storage: Storage, slot: Slot, item_id: ItemID;
-eqn slot_of(storage, item_id) = if(
-    storage_entry_item_id(storage(slot)) != item_id,
-    slot_of(storage, item_id),
-    slot
-);
+eqn slot_of(storage, item_id, slot) =
+    if(
+        slot >= 10,
+        no_slot,
+        if(
+            is_occupied(storage, slot) &&
+            storage_entry_item_id(storage(slot)) == item_id,
+            some_slot(slot),
+            slot_of(storage, item_id, slot + 1)
+        )
+    );
 
 %% Checks if a slot of is occupied in storage.
 map is_occupied: Storage # Slot -> Bool;
