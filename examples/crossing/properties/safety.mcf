@@ -1,0 +1,3 @@
+% After a BarrierOpened action happened and no barrierClosed
+% action happened there can't be a greenLight action.
+[true*. barrierOpened. !barrierClosed* . greenLight] false
