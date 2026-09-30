@@ -9,8 +9,6 @@ sort OptionalItemID = struct no_item_id | some_item_id(
     value_some_item_id: ItemID
 );
 
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Slot %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -39,16 +37,12 @@ sort Error = struct unexpected_occupied
     | drop_off_busy
     ;
 
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Axis %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% The Axis can be either the X, Y, or Z axis.
 sort Axis = struct x_axis | y_axis | z_axis;
-
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Direction %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -61,13 +55,6 @@ sort Direction = struct positive | negative;
 map flip: Direction -> Direction;
 eqn flip(positive) = negative;
 eqn flip(negative) = positive;
-
-% map direction_from: Nat -> Direction;
-% var number: Nat
-% eqn (number < 0) -> direction_from(number) = negative;
-% eqn (number > 0) -> direction_from(number) = positive;
-
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Position3D %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -117,7 +104,6 @@ var position1, position2: Position3D, axis: Axis;
 eqn distance_for_axis(position1, position2, z_axis) = 
     z_distance(position1, position2);
 
-
 %% Calculates the manhattan distance between two 3D points.
 map manhattan_distance: Position3D # Position3D -> Int;
 var position1, position2: Position3D;
@@ -132,8 +118,6 @@ map is_at_belt: Position3D -> Bool;
 var position: Position3D;
 eqn is_at_belt(position) = (position == DEFAULT_POSITION3D);
 
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Storage %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -144,7 +128,6 @@ sort Storage = Slot -> StorageEntry;
 
 map EMPTY_STORAGE: Storage;
 eqn EMPTY_STORAGE = lambda slot: Slot. empty_storage_entry;
-
 
 %% Checks if an item with id `id` is stored
 map slot_of: Storage # ItemID # Slot -> OptionalSlot;
@@ -176,8 +159,6 @@ map clear_slot: Storage # Slot -> Storage;
 var storage: Storage, slot: Slot;
 eqn clear_slot(storage, slot) = storage[slot -> empty_storage_entry];
 
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Movement %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -187,8 +168,6 @@ sort Movement = struct movement(
     movement_direction: Direction,
     movement_axis: Axis
 );
-
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Light %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -205,8 +184,6 @@ act setEmergencyLight: Bool;
 proc EmergencyLight(on: Bool) = sum new: Bool . (
     setEmergencyLight(new) . EmergencyLight(new)
 );
-
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Display %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -234,8 +211,6 @@ proc DisplayProcess(display_state: DisplayState) =
         receive_display_update(new_state).
         DisplayProcess(new_state);
 
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Gripper %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -252,7 +227,6 @@ eqn DEFAULT_GRIPPER_STATE = empty_gripper;
 act receive_gripper_update: GripperState;
 act send_gripper_update: GripperState;
 act apply_gripper_update: GripperState;
-
 
 sort GripperMode = struct hovering(
     gripper_mode_claw_state: GripperState,
@@ -284,7 +258,6 @@ eqn DEFAULT_GRIPPER_MODE = hovering(
     DEFAULT_POSITION3D
 );
 
-
 act send_move_gripper_to_belt;
 act read_move_gripper_to_belt;
 act move_gripper_to_belt;
@@ -293,12 +266,10 @@ act send_move_gripper_to_slot: Slot;
 act read_move_gripper_to_slot: Slot;
 act move_gripper_to_slot: Slot;
 
-
 %% Reading the gripper sensor
 act send_gripper_sensor: Bool;
 act read_gripper_sensor: Bool;
 act use_gripper_sensor: Bool;
-
 
 %% Gripper: is responsible for keeping track of location and whether it is
 %% carrying an item inside the claw.
@@ -312,8 +283,6 @@ proc GripperProcess(
     ) <> delta
 );
     
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MachineMode %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -377,8 +346,6 @@ var mode: MachineMode;
 eqn is_recovery_mode(mode) = false;
 eqn is_recovery_mode(recovery_mode) = true;
 
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Machine %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -425,7 +392,6 @@ proc Machine(
         recover . Machine(recovery_mode, storage)
     <> delta
 );
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Init %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
