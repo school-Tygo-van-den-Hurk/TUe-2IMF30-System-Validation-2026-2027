@@ -1,680 +1,324 @@
-%% Must be unique.
-sort ItemID = Nat;
-sort OptionalItemID = struct no_item_id | some_item_id(value_some_item_id: ItemID);
-sort Slot = Nat;
-sort OptionalSlot = struct no_slot | some_slot(value_some_slot: Slot);
-%% The errors that can occur during operation.
-sort Error = struct unexpected_occupied | drop_off_busy;
-sort Axis = struct x_axis | y_axis | z_axis;
-sort Direction = struct positive | negative;
-sort Position3D = struct position_3d(x_coordinate: Nat, y_coordinate: Nat, z_coordinate: Nat);
-sort DisplayState = struct clear | operation_completed | no_slot_available |
-                           item_not_found | request_accepted |
-                           display_error(error_for_display: Error);
-sort MachineMode = struct idle_mode
-    | retrieving_mode(
-        retrieving_item_id: ItemID
-    )
-    | storing_mode(
-        storing_item_id: ItemID, 
-        storing_slot: Slot
-    )
-    | error_mode(
-        mode_error: Error
-    )
-    | emergency_mode
-    | recovery_mode
-    ;
-%% NOTE(Jorens): if its a gripper movement, we can show it in the name. 
-%% The movement that the gripper can have.
-sort Movement = struct movement(movement_direction: Direction, movement_axis: Axis);
-sort StorageEntry = struct filled(storage_entry_item_id: Nat);
-cons empty_storage_entry: StorageEntry;
-sort Storage = Slot -> StorageEntry;
-sort GripperState = struct empty_gripper | carrying_gripper(gripper_item: ItemID);
-sort GripperMode = 
-    struct hovering(
-        gripper_mode_claw_state: GripperState, gripper_mode_position: Position3D
-    ) |
-    moving(
-        gripper_mode_claw_state: GripperState,
-        gripper_mode_position: Position3D,
-        gripper_instructions: List(Movement)
-    );
+sort
+  Axis = struct X | Y | Z;
+  % NOTE(Jorens): 
+  %  -> UnexpectedItemOnSlot: we just cancel the request and update the
+  %                           storage.
+  %  -> NoItemOnSlot: we just cancel the request and update the occupancy.
+  DisplayValue = struct 
+     displaySlot(Slot)
+   | ItemNotFound
+   | StorageFull 
+   | DropOffBusy
+   | RequestAccepted
+   | OperationCompleted;
+  Mode = struct Idle | Working | Emergency | Recovery;
+  MotorState = struct Forward | Backward | Stop;
+  Movement = struct movement(axis : Axis, state : MotorState);
+  Position = struct pos(x : Int, y : Int, z: Int);
+  Slot = Nat;
 
-map DEFAULT_POSITION3D: Position3D;
-eqn DEFAULT_POSITION3D = position_3d(0, 0, 0);
-
-map EMPTY_STORAGE: Storage;
-eqn EMPTY_STORAGE = lambda slot: Slot. empty_storage_entry;
-
-map DEFAULT_DISPLAY_STATE: DisplayState;
-eqn DEFAULT_DISPLAY_STATE = clear;
-
-map DEFAULT_GRIPPER_STATE: GripperState;
-eqn DEFAULT_GRIPPER_STATE = empty_gripper;
+map
+  oppositeState     : MotorState -> MotorState; % add to spec.
+  slotRoute         : Slot -> List(Movement);
+  reverseRoute      : List(Movement) -> List(Movement);
+  routeEndpointFrom : Position # List(Movement) -> Position;
+  movePos           : Movement # Position -> Position;
+  slotAmount        : Nat;
+  find_empty        : Nat # FSet(Slot) -> Nat;
 
 
-map DEFAULT_GRIPPER_MODE: GripperMode;
-eqn DEFAULT_GRIPPER_MODE = hovering(
-    DEFAULT_GRIPPER_STATE,
-    DEFAULT_POSITION3D
-);
+var
+  m   : Movement;
+  ms  : List(Movement);
+  p   : Position;
+  s   : Nat; 
+  occ : FSet(Slot);
+eqn
+  
+  oppositeState(Forward)  = Backward;
+  oppositeState(Backward) = Forward;
+  oppositeState(Stop)     = Stop;
 
-map DEFAULT_MACHINE_MODE: MachineMode;
-eqn DEFAULT_MACHINE_MODE = idle_mode;
+  reverseRoute([]) = [];
+  reverseRoute(m |> ms) =
+      reverseRoute(ms) ++ [movement(axis(m), oppositeState(state(m)))];
 
-map get_position: Slot -> Position3D;
-var slot: Slot;
-eqn get_position(slot) = position_3d(
-    slot mod 5 + 1, % (0,0,0) is the exit, so slots start at 1 for x.
-    floor(slot / 5) mod 5,
-    floor(slot / 25) mod 5
-);
+  slotRoute(0) = 
+    [
+      movement(X, Backward),
+      movement(Y, Forward),
+      movement(Y, Forward),
+      movement(X, Forward)
+    ];
+  slotRoute(1) = 
+    [
+      movement(X, Backward),
+      movement(Y, Forward),
+      movement(Y, Forward),
+      movement(Z, Forward),
+      movement(X, Forward)
+    ];
+  slotRoute(2) = 
+    [
+      movement(X, Backward),
+      movement(Y, Forward),
+      movement(Y, Forward),
+      movement(Z, Backward),
+      movement(X, Forward)
+    ];
 
-map flip: Direction -> Direction;
-eqn flip(positive) = negative;
-eqn flip(negative) = positive;
-
-map x_distance: Position3D # Position3D -> Int;
-var position1, position2: Position3D;
-eqn x_distance(position1, position2) = (
-    x_coordinate(position1) - x_coordinate(position2)
-);
-
-map y_distance: Position3D # Position3D -> Int;
-var position1, position2: Position3D;
-eqn y_distance(position1, position2) = (
-    y_coordinate(position1) - y_coordinate(position2)
-);
-
-map z_distance: Position3D # Position3D -> Int;
-var position1, position2: Position3D;
-eqn z_distance(position1, position2) = (
-    z_coordinate(position1) - z_coordinate(position2)
-);
-
-map distance_for_axis: Position3D # Position3D # Axis -> Int;
-var position1, position2: Position3D, axis: Axis;
-eqn distance_for_axis(position1, position2, x_axis) =
-    x_distance(position1, position2);
-var position1, position2: Position3D, axis: Axis;
-eqn distance_for_axis(position1, position2, y_axis) =
-    y_distance(position1, position2);
-var position1, position2: Position3D, axis: Axis;
-eqn distance_for_axis(position1, position2, z_axis) = 
-    z_distance(position1, position2);
-
-map manhattan_distance: Position3D # Position3D -> Int;
-var position1, position2: Position3D;
-eqn manhattan_distance(position1, position2) = (
-    x_distance(position1, position2) +
-    y_distance(position1, position2) +
-    z_distance(position1, position2)
-);
-
-map is_at_belt: Position3D -> Bool;
-var position: Position3D;
-eqn is_at_belt(position) = (position == DEFAULT_POSITION3D);
-
-%% Checks if an item with id `id` is stored
-map slot_of: Storage # ItemID # Slot -> OptionalSlot;
-var storage: Storage, slot: Slot, item_id: ItemID;
-eqn slot_of(storage, item_id, slot) =
-    if(
-        slot >= 10,
-        no_slot,
+  routeEndpointFrom(p, []) = p;
+  routeEndpointFrom(p, m |> ms) = routeEndpointFrom(movePos(m, p), ms);
+  movePos(m, p) =
+      if(
+        state(m) == Forward,
         if(
-            is_occupied(storage, slot) &&
-            storage_entry_item_id(storage(slot)) == item_id,
-            some_slot(slot),
-            slot_of(storage, item_id, slot + 1)
+          axis(m) == X,
+          pos(x(p) + 1, y(p), z(p)),
+          if(
+            axis(m) == Y,
+            pos(x(p), y(p) + 1, z(p)),
+            pos(x(p), y(p), z(p) + 1)
+          )
+        ),
+        if(
+          state(m) == Backward,
+          if(
+              axis(m) == X,
+              pos(x(p) - 1, y(p), z(p)),
+              if(
+                  axis(m) == Y,
+                  pos(x(p), y(p) - 1, z(p)),
+                  pos(x(p), y(p), z(p) - 1)
+              )
+          ),
+          p
         )
+      );
+
+  slotAmount = 3;
+
+  (s >= slotAmount) 
+    -> find_empty(s, occ) = slotAmount;
+  (s < slotAmount) && (s in occ) 
+    -> find_empty(s, occ) = find_empty(s + 1, occ);
+  (s < slotAmount) && !(s in occ)
+    -> find_empty(s, occ) = s;
+
+act
+
+  setMovement       : Movement;
+  gridReached       : Axis;
+  engageGripper, disengageGripper;
+  objectAtPickup    : Bool;
+  objectInGripper   : Bool;
+  requestStorage;
+  requestRetrieval  : Nat;
+  storageComplete   : Slot;
+  retrievalComplete : Slot;
+  setDisplay        : DisplayValue;
+  setErrorLight     : Bool;
+  setEmergencyLight : Bool;
+  emergencyPressed;
+  emergencyReleased;
+  resetError;
+
+  s_initiateEmergency, r_initiateEmergency, comm_initiateEmergency;
+  s_initiateRecovery, r_initiateRecovery, comm_initiateRecovery;
+  s_acceptRequest, r_acceptRequest, comm_acceptRequest: Slot;
+  s_rejectRequest, r_rejectRequest, comm_rejectRequest: Slot;
+  s_requestPickupSlot, r_requestPickupSlot, comm_requestPickupSlot: Slot;
+
+  s_requestHandout, r_requestHandout, comm_requestHandout;
+
+  % s_requestReturnPickup, r_requestReturnPickup, comm_requestReturnPickup;
+
+  s_requestStoreSlot, r_requestStoreSlot, comm_requestStoreSlot;
+  s_operationCompleted, r_operationCompleted, comm_operationCompleted;
+  s_armMoveToSlot, r_armMoveToSlot, comm_armMoveToSlot : Slot;
+  s_armReturnToPickup, r_armReturnToPickup, comm_armReturnToPickup : Slot;
+  s_armOperationCompleted, r_armOperationCompleted, comm_armOperationCompleted;
+
+proc
+
+  EmergencyController(isEmergency: Bool) =
+    !(isEmergency) ->
+      emergencyPressed .
+      s_initiateEmergency .
+      EmergencyController(true)
+    +
+    isEmergency ->
+      emergencyReleased .
+      s_initiateRecovery . 
+      s_requestHandout .
+      EmergencyController(false);
+
+  UserInterface =
+    (
+      requestStorage . s_requestStoreSlot .
+      (
+        sum slot: Slot .
+        (slot < slotAmount) ->
+          (
+            r_acceptRequest(slot) . 
+            r_operationCompleted .
+            setDisplay(displaySlot(slot)) 
+            + 
+            r_rejectRequest(slot) . 
+            setDisplay(StorageFull)
+          )
+      ) .
+      UserInterface
+    ) 
+    +
+    (
+      sum slot: Slot . (slot < slotAmount) ->
+        requestRetrieval(slot) . s_requestPickupSlot(slot) .
+        (
+          r_acceptRequest(slot) . r_operationCompleted .
+                                  setDisplay(displaySlot(slot)) + 
+          r_rejectRequest(slot) . setDisplay(ItemNotFound)
+        ) .
+        UserInterface
     );
 
-map is_occupied: Storage # Slot -> Bool;
-var storage: Storage, slot: Slot, entry: StorageEntry;
-eqn is_occupied(storage, slot) = storage(slot) != empty_storage_entry;
-
-map put_item_in_slot: Storage # ItemID # Slot -> Storage;
-var storage: Storage, slot: Slot, id: ItemID;
-eqn put_item_in_slot(storage, id, slot) = storage[slot -> filled(id)];
-
-map clear_slot: Storage # Slot -> Storage;
-var storage: Storage, slot: Slot;
-eqn clear_slot(storage, slot) = storage[slot -> empty_storage_entry];
-
-map is_hovering: GripperMode -> Bool;
-var gripper_mode: GripperMode;
-eqn is_hovering(gripper_mode) = false;
-var state: GripperState, position: Position3D;
-eqn is_hovering(hovering(state, position)) = true;
-
-map is_moving: GripperMode -> Bool;
-var gripper_mode: GripperMode;
-eqn is_moving(gripper_mode) = false;
-var state: GripperState, position: Position3D, instructions: List(Movement);
-eqn is_moving(moving(state, position, instructions)) = true;
-
-map is_idle_mode: MachineMode -> Bool;
-var mode: MachineMode;
-eqn is_idle_mode(mode) = false;
-eqn is_idle_mode(idle_mode) = true;
-
-map is_retrieving_mode: MachineMode -> Bool;
-var mode: MachineMode;
-eqn is_retrieving_mode(mode) = false;
-var item_id: ItemID;
-eqn is_retrieving_mode(retrieving_mode(item_id)) = true;
-
-map is_storing_mode: MachineMode -> Bool;
-var mode: MachineMode;
-eqn is_storing_mode(mode) = false;
-var item_id: ItemID, slot: Slot;
-eqn is_storing_mode(storing_mode(item_id, slot)) = true;
-
-map is_error_mode: MachineMode -> Bool;
-var mode: MachineMode;
-eqn is_error_mode(mode) = false;
-var error: Error;
-eqn is_error_mode(error_mode(error)) = true;
-
-map is_emergency_mode: MachineMode -> Bool;
-var mode: MachineMode;
-eqn is_emergency_mode(mode) = false;
-eqn is_emergency_mode(emergency_mode) = true;
-
-map is_recovery_mode: MachineMode -> Bool;
-var mode: MachineMode;
-eqn is_recovery_mode(mode) = false;
-eqn is_recovery_mode(recovery_mode) = true;
-
-act setErrorLight: Bool;
-act setEmergencyLight: Bool;
-
-act receive_display_update: DisplayState;
-act send_display_update: DisplayState;
-act apply_display_update: DisplayState;
-
-%% NOTE(Tygo): Not entirely sure about this one
-act receive_gripper_update: GripperState;
-act send_gripper_update: GripperState;
-act apply_gripper_update: GripperState;
-
-act send_move_gripper_to_belt;
-act read_move_gripper_to_belt;
-act move_gripper_to_belt;
-
-act send_move_gripper_to_slot: Slot;
-act read_move_gripper_to_slot: Slot;
-act move_gripper_to_slot: Slot;
-
-act send_gripper_sensor: Bool;
-act read_gripper_sensor: Bool;
-act use_gripper_sensor: Bool;
-
-act store_item: ItemID;
-act retrieve_item: ItemID;
-act recover;
-
-proc ErrorLight(on: Bool) = sum new: Bool . (
-    setErrorLight(new) . ErrorLight(new)
-);
-
-proc EmergencyLight(on: Bool) = sum new: Bool . (
-    setEmergencyLight(new) . EmergencyLight(new)
-);
-
-%% Display: awaits updates, and then applies them.
-proc DisplayProcess(display_state: DisplayState) =
-    sum new_state: DisplayState.
-        receive_display_update(new_state).
-        DisplayProcess(new_state);
-
-%% Gripper: is responsible for keeping track of location and whether it is
-%% carrying an item inside the claw.
-proc GripperProcess(
-    mode: GripperMode
-) = (
-    (is_hovering(mode)) -> (
-        delta
-    ) <> (is_moving(mode)) -> (
-        delta
-    ) <> delta
-);
-
-proc Machine(
-    mode: MachineMode,
-    storage: Storage
-) = (
-    (is_idle_mode(mode)) -> (
-        sum item: ItemID . (
+  StorageController(occupancy: FSet(Slot)) = 
+    (
+      sum slot: Slot . (slot < slotAmount) ->
+        (
+          r_requestPickupSlot(slot) .
             (
-                store_item(item) .
-                Machine(
-                    storing_mode(item, 0),
-                    storage
-                )
-            ) + (
-                retrieve_item(item) .
-                Machine(
-                    retrieving_mode(item),
-                    storage
-                )
+              !(slot in occupancy) ->
+                s_rejectRequest(slot) .
+                StorageController(occupancy)
+              +
+              (slot in occupancy) ->
+                s_acceptRequest(slot) . s_armMoveToSlot(slot) .
+                r_armOperationCompleted . s_operationCompleted .
+                StorageController(occupancy - {slot})
             )
         )
     )
-    <> (is_recovery_mode(mode)) -> 
-        send_display_update(clear) .
-        setEmergencyLight(false) .
-        setErrorLight(false) .
-        Machine(idle_mode, storage)
-    <> (is_error_mode(mode)) -> 
-        send_display_update(display_error(mode_error(mode))) .
-        setEmergencyLight(is_emergency_mode(mode)) .
-        setErrorLight(is_error_mode(mode)) .
-        recover . Machine(recovery_mode, storage)
-    <> (is_emergency_mode(mode)) -> 
-        send_display_update(clear) .
-        setEmergencyLight(is_emergency_mode(mode)) .
-        setErrorLight(is_error_mode(mode)) .
-        recover . Machine(recovery_mode, storage)
-    <> delta
-);
+    +
+    (
+      sum empty_slot: Nat . 
+      (empty_slot == find_empty(0, occupancy)) ->
+        (
+          r_requestStoreSlot .
+          (
+            (empty_slot < slotAmount) ->
+              s_acceptRequest(empty_slot) .
+              s_armMoveToSlot(empty_slot) .
+              r_armOperationCompleted .
+              s_operationCompleted .
+              StorageController(occupancy + {empty_slot})
+            +
+            (empty_slot == slotAmount) ->
+              s_rejectRequest(empty_slot) .
+              StorageController(occupancy)
+          )
+        )
+    ) +
+    (
+      r_requestHandout . 
+      r_armOperationCompleted . 
+      StorageController(occupancy)
+    );
 
-init comm(
-    {
-        send_display_update | receive_display_update
-            -> apply_display_update,
-        send_gripper_update | receive_gripper_update
-            -> apply_gripper_update,
-        send_gripper_sensor | read_gripper_sensor
-            -> use_gripper_sensor
-    },
-    DisplayProcess(DEFAULT_DISPLAY_STATE) ||
-    GripperProcess(DEFAULT_GRIPPER_MODE) ||
-    EmergencyLight(is_emergency_mode(DEFAULT_MACHINE_MODE)) ||
-    ErrorLight(is_error_mode(DEFAULT_MACHINE_MODE)) ||
-    Machine(
-        DEFAULT_MACHINE_MODE,
-        EMPTY_STORAGE
+  FollowRoute(
+    trace: List(Movement),
+    route: List(Movement),
+    movingToSlot: Bool
+  ) =
+    (route == []) ->
+      s_armOperationCompleted . 
+      (movingToSlot -> ArmController(trace) <> ArmController(route))
+    <>
+      (
+        setMovement(head(route)) + 
+        (
+          r_initiateEmergency .
+          movingToSlot 
+            -> ArmController(reverseRoute(trace)) 
+            <> ArmController(route)
+        )
+      ) .
+      (
+        gridReached(axis(head(route))) .
+        FollowRoute(trace ++ [head(route)], tail(route), movingToSlot)
+        +
+        r_initiateEmergency .
+        setMovement(movement(axis(head(route)), Stop)) .
+        movingToSlot 
+          % NOTE(Jorens): We did not finish movement (a, s)
+          % If-case: we take the current movement backwards and continue with
+          % the reverse.
+          % Else-case: We need to finish the current move and continue the
+          % route, which just correspond to the route.
+          % trace: X+, X+, Y+, Z+
+          % head:  Y+
+          % route: ....
+          -> ArmController(reverseRoute(trace ++ [head(route)])) 
+          <> ArmController(route)
+      );
+
+  ArmController(returnRoute: List(Movement)) = 
+    (
+      r_initiateRecovery . 
+      FollowRoute([], returnRoute, false)
     )
-);
+    +
+    (
+      r_requestHandout . 
+      disengageGripper .
+      ArmController([])
+    )
+    +
+    (
+      sum slot: Slot . (slot < slotAmount) -> 
+        (
+          r_armMoveToSlot(slot) .
+          FollowRoute([], slotRoute(slot), true) 
+          +
+          r_armReturnToPickup(slot) .
+          FollowRoute([], reverseRoute(slotRoute(slot)), false)
+        )
+    );
 
-% Properties - also available as one formula in true.mcf.
-% I copied the old true.mcf and joined the checks with && to keep them in one file.
-% All P01-P09 blocks must hold; a false result alone does not say which block failed.
-% I have not compiled the model or run verification.
-%
-% I followed the code: separate storing/retrieving modes, store_item(id), and valid slot 0.
-% The report uses Working, requestStorage without an ID, and 0 for "not stored".
-% Replies use apply_display_update; receive_display_update can happen on its own.
-% The repeated action combinations include simultaneous light/display events.
-% These patterns will need updating when GripperProcess gets its behaviour.
-%
-% Jorens confirmed that recovery cancels the request: finish the current grid move,
-% then undo the request. The code only clears the UI and returns to idle so far.
-% I use recover as cancellation, not as confirmation that this rollback is finished.
-% Jorens also confirmed that releasing a held item at (0,0,0) means handoff,
-% and releasing it after reaching a slot confirms placement in that slot.
-% The reach/release behaviour is not implemented yet, so I have not encoded those checks.
-%
-% TRE01: pending - storage flow, confirmed placement and assigned-ID display are missing.
-% TRE02: pending - the full-storage check and rejection branch are missing.
-% TRE03: pending - retrieval, confirmed handoff and storage updates are missing.
-% TRE04: partial - P07 only checks a possible not-found reply for the first retrieval.
-% TRE05: pending - finishing the grid move and undoing the request are not implemented.
-% TRE06: pending - release, position and occupancy must be linked to actual behaviour.
-% TRE07: pending - there are no per-axis start/stop actions to check yet.
-% TRE08: pending - stopping a moving arm on error/emergency is not implemented.
-% TRE09: pending - error/emergency entry and movement behaviour are still missing.
-% TRE10: pending - error/emergency entry and gripper engage/release behaviour are missing.
-%
-% The source also needs its is_* equations, slot_of and get_position types reviewed.
-% These checks do not fill in the missing Machine/Gripper branches.
-%
-% P01 - No global deadlock.
-% The lights/display can keep going while Machine is stuck; P02 checks that separately.
-% (
-%   [true*]<true>true
-% )
-% &&
-%
-% P02 - The controller can still make progress from every reachable state.
-% This checks possibility, not fair scheduling or progress on every run.
-% (
-%   [true*]
-%   <true*.(
-%     (exists item: ItemID. store_item(item) || retrieve_item(item))
-%     || recover
-%     || (exists reply: DisplayState.
-%           send_display_update(reply) || apply_display_update(reply))
-%   )>true
-% )
-% &&
-%
-% P03 - Either request can be received initially, for any ItemID.
-% Receiving a request does not mean it has been accepted or completed.
-% (
-%   forall item: ItemID.
-%   (
-%     <store_item(item)>true
-%     && <retrieve_item(item)>true
-%   )
-% )
-% &&
-%
-% P04 - After a store request, a result or cancellation is possible before the next request.
-% I use recover as cancellation here; this does not check that rollback has finished.
-% (
-%   [true*]
-%   forall item: ItemID.
-%   [
-%     exists display: DisplayState, error_on, emergency_on: Bool.
-%     (
-%       store_item(item)
-%       || store_item(item) | receive_display_update(display)
-%       || store_item(item) | setErrorLight(error_on)
-%       || store_item(item) | setEmergencyLight(emergency_on)
-%       || store_item(item) | receive_display_update(display) | setErrorLight(error_on)
-%       || store_item(item) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%       || store_item(item) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%       || store_item(item) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%     )
-%   ]
-%   <
-%     !(
-%       exists other: ItemID, display: DisplayState, error_on, emergency_on: Bool.
-%       (
-%         store_item(other)
-%         || retrieve_item(other)
-%         || store_item(other) | receive_display_update(display)
-%         || retrieve_item(other) | receive_display_update(display)
-%         || store_item(other) | setErrorLight(error_on)
-%         || retrieve_item(other) | setErrorLight(error_on)
-%         || store_item(other) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | setEmergencyLight(emergency_on)
-%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on)
-%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on)
-%         || store_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%         || store_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%       )
-%     )*
-%     .
-%     (
-%       (
-%         exists reply: DisplayState, error_on, emergency_on: Bool.
-%         val(reply == operation_completed || reply == no_slot_available || reply == display_error(unexpected_occupied) || reply == display_error(drop_off_busy)) &&
-%         (
-%           apply_display_update(reply)
-%           || apply_display_update(reply) | setErrorLight(error_on)
-%           || apply_display_update(reply) | setEmergencyLight(emergency_on)
-%           || apply_display_update(reply) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         )
-%       )
-%       ||
-%       (
-%         exists display: DisplayState, error_on, emergency_on: Bool.
-%         (
-%           recover
-%           || recover | receive_display_update(display)
-%           || recover | setErrorLight(error_on)
-%           || recover | setEmergencyLight(emergency_on)
-%           || recover | receive_display_update(display) | setErrorLight(error_on)
-%           || recover | receive_display_update(display) | setEmergencyLight(emergency_on)
-%           || recover | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%           || recover | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         )
-%       )
-%     )
-%   >true
-% )
-% &&
-%
-% P05 - After a retrieval request, a result or cancellation is possible before the next request.
-% Again, recover marks cancellation, not the end of the recovery movement.
-% (
-%   [true*]
-%   forall item: ItemID.
-%   [
-%     exists display: DisplayState, error_on, emergency_on: Bool.
-%     (
-%       retrieve_item(item)
-%       || retrieve_item(item) | receive_display_update(display)
-%       || retrieve_item(item) | setErrorLight(error_on)
-%       || retrieve_item(item) | setEmergencyLight(emergency_on)
-%       || retrieve_item(item) | receive_display_update(display) | setErrorLight(error_on)
-%       || retrieve_item(item) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%       || retrieve_item(item) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%       || retrieve_item(item) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%     )
-%   ]
-%   <
-%     !(
-%       exists other: ItemID, display: DisplayState, error_on, emergency_on: Bool.
-%       (
-%         store_item(other)
-%         || retrieve_item(other)
-%         || store_item(other) | receive_display_update(display)
-%         || retrieve_item(other) | receive_display_update(display)
-%         || store_item(other) | setErrorLight(error_on)
-%         || retrieve_item(other) | setErrorLight(error_on)
-%         || store_item(other) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | setEmergencyLight(emergency_on)
-%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on)
-%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on)
-%         || store_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%         || store_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%       )
-%     )*
-%     .
-%     (
-%       (
-%         exists reply: DisplayState, error_on, emergency_on: Bool.
-%         val(reply == operation_completed || reply == item_not_found || reply == display_error(unexpected_occupied) || reply == display_error(drop_off_busy)) &&
-%         (
-%           apply_display_update(reply)
-%           || apply_display_update(reply) | setErrorLight(error_on)
-%           || apply_display_update(reply) | setEmergencyLight(emergency_on)
-%           || apply_display_update(reply) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         )
-%       )
-%       ||
-%       (
-%         exists display: DisplayState, error_on, emergency_on: Bool.
-%         (
-%           recover
-%           || recover | receive_display_update(display)
-%           || recover | setErrorLight(error_on)
-%           || recover | setEmergencyLight(emergency_on)
-%           || recover | receive_display_update(display) | setErrorLight(error_on)
-%           || recover | receive_display_update(display) | setEmergencyLight(emergency_on)
-%           || recover | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%           || recover | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         )
-%       )
-%     )
-%   >true
-% )
-% &&
-%
-% P06 - No second request before a terminal reply or cancellation.
-% This stops checking at recover; blocking requests during rollback is still pending.
-% (
-%   [
-%     true*
-%     .
-%     (
-%       exists other: ItemID, display: DisplayState, error_on, emergency_on: Bool.
-%       (
-%         store_item(other)
-%         || retrieve_item(other)
-%         || store_item(other) | receive_display_update(display)
-%         || retrieve_item(other) | receive_display_update(display)
-%         || store_item(other) | setErrorLight(error_on)
-%         || retrieve_item(other) | setErrorLight(error_on)
-%         || store_item(other) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | setEmergencyLight(emergency_on)
-%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on)
-%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on)
-%         || store_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%         || store_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%       )
-%     )
-%     .
-%     !(
-%       (
-%         exists reply: DisplayState, error_on, emergency_on: Bool.
-%         val(reply == operation_completed || reply == no_slot_available || reply == item_not_found || reply == display_error(unexpected_occupied) || reply == display_error(drop_off_busy)) &&
-%         (
-%           apply_display_update(reply)
-%           || apply_display_update(reply) | setErrorLight(error_on)
-%           || apply_display_update(reply) | setEmergencyLight(emergency_on)
-%           || apply_display_update(reply) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         )
-%       )
-%       ||
-%       (
-%         exists display: DisplayState, error_on, emergency_on: Bool.
-%         (
-%           recover
-%           || recover | receive_display_update(display)
-%           || recover | setErrorLight(error_on)
-%           || recover | setEmergencyLight(emergency_on)
-%           || recover | receive_display_update(display) | setErrorLight(error_on)
-%           || recover | receive_display_update(display) | setEmergencyLight(emergency_on)
-%           || recover | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%           || recover | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         )
-%       )
-%     )*
-%     .
-%     (
-%       exists other: ItemID, display: DisplayState, error_on, emergency_on: Bool.
-%       (
-%         store_item(other)
-%         || retrieve_item(other)
-%         || store_item(other) | receive_display_update(display)
-%         || retrieve_item(other) | receive_display_update(display)
-%         || store_item(other) | setErrorLight(error_on)
-%         || retrieve_item(other) | setErrorLight(error_on)
-%         || store_item(other) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | setEmergencyLight(emergency_on)
-%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on)
-%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on)
-%         || store_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%         || store_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || store_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%       )
-%     )
-%   ]false
-% )
-% &&
-%
-% P07 - A first retrieval from empty storage can report item_not_found.
-% This is only the initial case of TRE04, not the full requirement.
-% (
-%   forall item: ItemID.
-%   (
-%     <retrieve_item(item)>true
-%     &&
-%     [
-%       exists display: DisplayState, error_on, emergency_on: Bool.
-%       (
-%         retrieve_item(item)
-%         || retrieve_item(item) | receive_display_update(display)
-%         || retrieve_item(item) | setErrorLight(error_on)
-%         || retrieve_item(item) | setEmergencyLight(emergency_on)
-%         || retrieve_item(item) | receive_display_update(display) | setErrorLight(error_on)
-%         || retrieve_item(item) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%         || retrieve_item(item) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         || retrieve_item(item) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%       )
-%     ]
-%     <
-%       !(
-%         exists other: ItemID, display: DisplayState, error_on, emergency_on: Bool.
-%         (
-%           store_item(other)
-%           || retrieve_item(other)
-%           || store_item(other) | receive_display_update(display)
-%           || retrieve_item(other) | receive_display_update(display)
-%           || store_item(other) | setErrorLight(error_on)
-%           || retrieve_item(other) | setErrorLight(error_on)
-%           || store_item(other) | setEmergencyLight(emergency_on)
-%           || retrieve_item(other) | setEmergencyLight(emergency_on)
-%           || store_item(other) | receive_display_update(display) | setErrorLight(error_on)
-%           || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on)
-%           || store_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%           || retrieve_item(other) | receive_display_update(display) | setEmergencyLight(emergency_on)
-%           || store_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%           || retrieve_item(other) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%           || store_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%           || retrieve_item(other) | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         )
-%       )*
-%       .
-%       (
-%         exists reply: DisplayState, error_on, emergency_on: Bool.
-%         val(reply == item_not_found) &&
-%         (
-%           apply_display_update(reply)
-%           || apply_display_update(reply) | setErrorLight(error_on)
-%           || apply_display_update(reply) | setEmergencyLight(emergency_on)
-%           || apply_display_update(reply) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%         )
-%       )
-%     >true
-%   )
-% )
-% &&
-%
-% P08 - At least one completion reply is reachable.
-% This is coverage, not proof that every request completes.
-% (
-%   <true*.(
-%     exists reply: DisplayState, error_on, emergency_on: Bool.
-%     val(reply == operation_completed) &&
-%     (
-%       apply_display_update(reply)
-%       || apply_display_update(reply) | setErrorLight(error_on)
-%       || apply_display_update(reply) | setEmergencyLight(emergency_on)
-%       || apply_display_update(reply) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%     )
-%   )>true
-% )
-% &&
-%
-% P09 - The recover action is reachable.
-% This is coverage, not proof of a completed recovery.
-% (
-%   <true*.(
-%     exists display: DisplayState, error_on, emergency_on: Bool.
-%     (
-%       recover
-%       || recover | receive_display_update(display)
-%       || recover | setErrorLight(error_on)
-%       || recover | setEmergencyLight(emergency_on)
-%       || recover | receive_display_update(display) | setErrorLight(error_on)
-%       || recover | receive_display_update(display) | setEmergencyLight(emergency_on)
-%       || recover | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%       || recover | receive_display_update(display) | setErrorLight(error_on) | setEmergencyLight(emergency_on)
-%     )
-%   )>true
-% )
-%
+init
+  allow(
+    {
+      setMovement, gridReached, engageGripper, disengageGripper,
+      objectAtPickup, objectInGripper, requestStorage, requestRetrieval,
+      storageComplete, retrievalComplete, setDisplay, setErrorLight,
+      setEmergencyLight, emergencyPressed, emergencyReleased, resetError,
+      comm_initiateEmergency, comm_initiateRecovery, comm_acceptRequest,
+      comm_rejectRequest, comm_requestPickupSlot, 
+      comm_requestStoreSlot, comm_operationCompleted,
+      comm_armMoveToSlot, comm_armReturnToPickup, comm_armOperationCompleted,
+      comm_requestHandout
+    },
+    comm(
+      {
+        s_acceptRequest         | r_acceptRequest         -> comm_acceptRequest,
+        s_rejectRequest         | r_rejectRequest         -> comm_rejectRequest,
+        s_requestPickupSlot     | r_requestPickupSlot     -> comm_requestPickupSlot,
+        % s_requestReturnPickup | r_requestReturnPickup   -> comm_requestReturnPickup,
+        s_requestStoreSlot      | r_requestStoreSlot      -> comm_requestStoreSlot,
+        s_operationCompleted    | r_operationCompleted    -> comm_operationCompleted,
+        s_armMoveToSlot         | r_armMoveToSlot         -> comm_armMoveToSlot,
+        s_armReturnToPickup     | r_armReturnToPickup     -> comm_armReturnToPickup,
+        s_armOperationCompleted | r_armOperationCompleted -> comm_armOperationCompleted,
+        s_initiateEmergency     | r_initiateEmergency     -> comm_initiateEmergency,
+        s_initiateRecovery      | r_initiateRecovery      -> comm_initiateRecovery,
+        s_requestHandout        | r_requestHandout        -> comm_requestHandout
+      },
+      EmergencyController(false)
+      ||
+      UserInterface   
+      ||
+      StorageController({}) 
+      || 
+      ArmController([])
+    )
+  );
