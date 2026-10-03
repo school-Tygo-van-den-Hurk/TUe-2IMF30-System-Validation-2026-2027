@@ -1,0 +1,85 @@
+#!/usr/bin/bash
+set -euo pipefail
+INPUT="src_spec"
+
+usage() {
+    cat <<EOF
+Usage: ${0##*/} <command>
+
+Commands:
+    compile    Compile mcrl2 to lps.
+    watch      Watch the input, compile on changes.
+    sim        Simulate the lps model.
+    lts        Generate state space, traces and detect deadlocks.
+EOF
+}
+
+mkdir -p ./build
+
+function cmd_compile() {
+    cp src/$INPUT.mcrl2 ./build
+    pushd ./build
+        if [[ -e $INPUT.mcrl2 ]]; then
+            mcrl22lps --lin-method=stack $INPUT.mcrl2 $INPUT.lps \
+                && echo "Success. Produced $INPUT.lps" \
+                || echo "Error"
+        else
+            echo "$INPUT.mcrl2 does not exist within src"
+        fi
+    popd
+}
+
+function cmd_watch() {
+    ls ./src/$INPUT.mcrl2 | entr -c -s './run compile'
+}
+
+function cmd_sim() {
+    pushd ./build
+        if [[ -e $INPUT.lps ]]; then
+            lpsxsim $INPUT.lps
+        else
+            echo "$INPUT.lps does not exist"
+        fi
+    popd
+}
+
+function cmd_lts() {
+    pushd ./build
+        if [[ -e $INPUT.lps ]]; then
+            rm -rf ./trc
+            rm -rf ./trc_pp
+
+            find . -maxdepth 1 -name '*.trc' -delete
+            lps2lts --trace -D $INPUT.lps $INPUT.lts \
+                && echo "Success" \
+                || echo "Error"
+            mkdir -p ./trc
+            mv *.trc ./trc
+
+            mkdir -p ./trc_pp
+            for f in ./trc/*.trc; do
+                [[ -e "$f" ]] || break
+                TRACE_BASE=$(basename -- "$f")
+                TRACE_NAME=${TRACE_BASE%.trc}
+                tracepp $f > ./trc_pp/$TRACE_NAME.txt
+            done
+        else
+            echo "$INPUT.lps does not exist"
+        fi
+    popd
+}
+
+main() {
+    [[ $# -lt 1 ]] && { usage; exit 1; }
+    local cmd="$1"
+    shift
+    if declare -F "cmd_$cmd" >/dev/null; then
+        "cmd_$cmd" "$@"
+    else
+        echo "Unknown command: $cmd" >&2
+        usage
+        exit 1
+    fi
+}
+
+main "$@"

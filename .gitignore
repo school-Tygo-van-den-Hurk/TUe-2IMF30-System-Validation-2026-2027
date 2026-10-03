@@ -16,3 +16,6 @@ result-*
 *.lps
 *.lts
 *.pbes
+
+# output
+build/
