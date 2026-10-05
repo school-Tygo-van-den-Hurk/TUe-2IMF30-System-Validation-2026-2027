@@ -14,9 +14,10 @@ your life a bit easier, use `./run` bash script. It has some frequently used
 actions that do not pollute the root dir, namely,
 
 ```
-./run compile # compiles the model.
-./run sim     # runs the simulation (gui).
-./run lts     # generates labeled transition system, detecting deadlocks,
-              # outputs their pretty-printed traces.
-./run watch   # Compile on save, assumes you have `entr` on your system.
+# Usage: ./run <command>
+# Commands:
+#    lps        Compile mcrl2 to lps.
+#    lts        Generate state space, traces and detect deadlocks.
+#    pbes       Builds pbes from properies.
+$    watch      Watch the input, builds lps and pbes on changes.
 ```

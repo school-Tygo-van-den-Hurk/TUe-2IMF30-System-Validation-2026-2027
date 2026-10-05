@@ -2,26 +2,35 @@
 set -euo pipefail
 INPUT="src_spec"
 
+# NOTE(Jorens): removes unnecessary pushd/popd log. 
+pushd () {
+    command pushd "$@" > /dev/null
+}
+popd () {
+    command popd "$@" > /dev/null
+}
+
 usage() {
     cat <<EOF
 Usage: ${0##*/} <command>
 
 Commands:
-    compile    Compile mcrl2 to lps.
-    watch      Watch the input, compile on changes.
-    sim        Simulate the lps model.
+    lps        Compile mcrl2 to lps.
     lts        Generate state space, traces and detect deadlocks.
+    pbes       Builds pbes from properies.
+    watch      Watch the input, builds lps and pbes on changes.
+    solve      Solves all the pbes that were built, collects evidence.
 EOF
 }
 
 mkdir -p ./build
 
-function cmd_compile() {
-    cp src/$INPUT.mcrl2 ./build
+function cmd_lps() {
     pushd ./build
+        cp ../src/$INPUT.mcrl2 .
         if [[ -e $INPUT.mcrl2 ]]; then
             mcrl22lps --lin-method=stack $INPUT.mcrl2 $INPUT.lps \
-                && echo "Success. Produced $INPUT.lps" \
+                && echo "./$INPUT.lps" \
                 || echo "Error"
         else
             echo "$INPUT.mcrl2 does not exist within src"
@@ -29,17 +38,19 @@ function cmd_compile() {
     popd
 }
 
-function cmd_watch() {
-    ls ./src/$INPUT.mcrl2 | entr -c -s './run compile'
-}
-
-function cmd_sim() {
+function cmd_pbes() {
     pushd ./build
-        if [[ -e $INPUT.lps ]]; then
-            lpsxsim $INPUT.lps
-        else
-            echo "$INPUT.lps does not exist"
-        fi
+        rm -rf ./properties # NOTE(Jorens): do we need this?
+        cp -r ../src/properties .
+        mkdir -p ./pbes
+        for f in ./properties/tre*.mcf; do
+            [[ -e "$f" ]] || break
+            PROP_BASENAME=$(basename -- "$f")
+            PROP_NAME=${PROP_BASENAME%.mcf}
+            lps2pbes --counter-example -f ./properties/$PROP_NAME.mcf \
+                $INPUT.lps ./pbes/$PROP_NAME.pbes \
+                && echo "./pbes/$PROP_NAME.pbes"
+        done
     popd
 }
 
@@ -51,10 +62,14 @@ function cmd_lts() {
 
             find . -maxdepth 1 -name '*.trc' -delete
             lps2lts --trace -D $INPUT.lps $INPUT.lts \
-                && echo "Success" \
+                && echo "./$INPUT.lts" \
                 || echo "Error"
             mkdir -p ./trc
-            mv *.trc ./trc
+
+            for f in *.trc; do
+                [[ -e "$f" ]] || break
+                mv "$f" ./trc/
+            done
 
             mkdir -p ./trc_pp
             for f in ./trc/*.trc; do
@@ -62,6 +77,38 @@ function cmd_lts() {
                 TRACE_BASE=$(basename -- "$f")
                 TRACE_NAME=${TRACE_BASE%.trc}
                 tracepp $f > ./trc_pp/$TRACE_NAME.txt
+            done
+        else
+            echo "$INPUT.lps does not exist"
+        fi
+    popd
+}
+
+function cmd_watch() {
+    ls ./src/{src_spec.mcrl2,properties/tre*.mcf} | \
+        entr -c -s './run lps && ./run pbes'
+}
+
+function cmd_solve() {
+    pushd ./build
+        if [[ -e "$INPUT.lps" ]]; then
+            
+            rm -rf ./evidence
+            mkdir -p ./evidence
+
+            for pbes_file in ./pbes/*.pbes; do
+                [[ -e "$pbes_file" ]] || break
+                
+                PBES_BASE=$(basename -- "$pbes_file")
+                PBES_NAME=${PBES_BASE%.pbes}
+                echo "Solving $PBES_NAME..."
+                EVIDENCE_TMP="evidence_${PBES_NAME}.lps"
+                pbessolve --evidence-file="$EVIDENCE_TMP" -f "$INPUT.lps" "$pbes_file"
+                if [[ -e "$EVIDENCE_TMP" ]]; then
+                    mv "$EVIDENCE_TMP" ./evidence/
+                else
+                    echo "No evidence generated for $PBES_NAME"
+                fi
             done
         else
             echo "$INPUT.lps does not exist"
