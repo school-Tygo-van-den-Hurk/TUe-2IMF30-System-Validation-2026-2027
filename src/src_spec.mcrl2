@@ -1,5 +1,5 @@
 sort
-  Axis = struct X | Y | Z;
+  Axis = struct XAxis | YAxis | ZAxis;
   % NOTE(Jorens): 
   %  -> UnexpectedItemOnSlot: we just cancel the request and update the
   %                           storage.
@@ -26,7 +26,6 @@ map
   slotAmount        : Nat;
   find_empty        : Nat # FSet(Slot) -> Nat;
 
-
 var
   m   : Movement;
   ms  : List(Movement);
@@ -45,26 +44,26 @@ eqn
 
   slotRoute(0) = 
     [
-      movement(X, Backward),
-      movement(Y, Forward),
-      movement(Y, Forward),
-      movement(X, Forward)
+      movement(XAxis, Backward),
+      movement(YAxis, Forward),
+      movement(YAxis, Forward),
+      movement(XAxis, Forward)
     ];
   slotRoute(1) = 
     [
-      movement(X, Backward),
-      movement(Y, Forward),
-      movement(Y, Forward),
-      movement(Z, Forward),
-      movement(X, Forward)
+      movement(XAxis, Backward),
+      movement(YAxis, Forward),
+      movement(YAxis, Forward),
+      movement(ZAxis, Forward),
+      movement(XAxis, Forward)
     ];
   slotRoute(2) = 
     [
-      movement(X, Backward),
-      movement(Y, Forward),
-      movement(Y, Forward),
-      movement(Z, Backward),
-      movement(X, Forward)
+      movement(XAxis, Backward),
+      movement(YAxis, Forward),
+      movement(YAxis, Forward),
+      movement(ZAxis, Backward),
+      movement(XAxis, Forward)
     ];
 
   routeEndpointFrom(p, []) = p;
@@ -73,10 +72,10 @@ eqn
       if(
         state(m) == Forward,
         if(
-          axis(m) == X,
+          axis(m) == XAxis,
           pos(x(p) + 1, y(p), z(p)),
           if(
-            axis(m) == Y,
+            axis(m) == YAxis,
             pos(x(p), y(p) + 1, z(p)),
             pos(x(p), y(p), z(p) + 1)
           )
@@ -84,10 +83,10 @@ eqn
         if(
           state(m) == Backward,
           if(
-              axis(m) == X,
+              axis(m) == XAxis,
               pos(x(p) - 1, y(p), z(p)),
               if(
-                  axis(m) == Y,
+                  axis(m) == YAxis,
                   pos(x(p), y(p) - 1, z(p)),
                   pos(x(p), y(p), z(p) - 1)
               )
@@ -97,192 +96,150 @@ eqn
       );
 
   slotAmount = 3;
-
-  (s >= slotAmount) 
-    -> find_empty(s, occ) = slotAmount;
+  (s >= slotAmount) -> find_empty(s, occ) = slotAmount;
+  (s < slotAmount) && !(s in occ) -> find_empty(s, occ) = s;
   (s < slotAmount) && (s in occ) 
     -> find_empty(s, occ) = find_empty(s + 1, occ);
-  (s < slotAmount) && !(s in occ)
-    -> find_empty(s, occ) = s;
 
 act
+  engageGripper, disengageGripper, requestStorage,
+  emergencyPressed, emergencyReleased, resetError;
+  setMovement : Movement;
+  gridReached : Axis;
+  setErrorLight, setEmergencyLight, objectAtPickup, objectInGripper : Bool;
+  requestRetrieval: Nat;
+  storageComplete, retrievalComplete : Slot;
+  setDisplay: DisplayValue;
 
-  setMovement       : Movement;
-  gridReached       : Axis;
-  engageGripper, disengageGripper;
-  objectAtPickup    : Bool;
-  objectInGripper   : Bool;
-  requestStorage;
-  requestRetrieval  : Nat;
-  storageComplete   : Slot;
-  retrievalComplete : Slot;
-  setDisplay        : DisplayValue;
-  setErrorLight     : Bool;
-  setEmergencyLight : Bool;
-  emergencyPressed;
-  emergencyReleased;
-  resetError;
-
-  s_initiateEmergency, r_initiateEmergency, comm_initiateEmergency;
-  s_initiateRecovery, r_initiateRecovery, comm_initiateRecovery;
-  s_acceptRequest, r_acceptRequest, comm_acceptRequest: Slot;
-  s_rejectRequest, r_rejectRequest, comm_rejectRequest: Slot;
-  s_requestPickupSlot, r_requestPickupSlot, comm_requestPickupSlot: Slot;
-
-  s_requestHandout, r_requestHandout, comm_requestHandout;
-
-  % s_requestReturnPickup, r_requestReturnPickup, comm_requestReturnPickup;
-
+  s_armEmergency, r_armEmergency, comm_armEmergency;
+  s_armRecovery, r_armRecovery, comm_armRecovery;
   s_requestStoreSlot, r_requestStoreSlot, comm_requestStoreSlot;
   s_operationCompleted, r_operationCompleted, comm_operationCompleted;
-  s_armMoveToSlot, r_armMoveToSlot, comm_armMoveToSlot : Slot;
-  s_armReturnToPickup, r_armReturnToPickup, comm_armReturnToPickup : Slot;
   s_armOperationCompleted, r_armOperationCompleted, comm_armOperationCompleted;
+  s_acceptRequest, r_acceptRequest, comm_acceptRequest,
+  s_rejectRequest, r_rejectRequest, comm_rejectRequest,
+  s_requestPickupSlot, r_requestPickupSlot, comm_requestPickupSlot,
+  s_armMoveToSlot, r_armMoveToSlot, comm_armMoveToSlot,
+  s_armRequestReturn,  r_armRequestReturn,  comm_armRequestReturn,
+  s_armRequestPickup,  r_armRequestPickup,  comm_armRequestPickup,
+  s_armRequestHandoff, r_armRequestHandoff, comm_armRequestHandoff : Slot;    
 
 proc
 
   EmergencyController(isEmergency: Bool) =
     !(isEmergency) ->
       emergencyPressed .
-      s_initiateEmergency .
+      s_armEmergency .
       EmergencyController(true)
     +
     isEmergency ->
       emergencyReleased .
-      s_initiateRecovery . 
-      s_requestHandout .
+      s_armRecovery . 
       EmergencyController(false);
 
   UserInterface =
     (
       requestStorage . s_requestStoreSlot .
       (
-        sum slot: Slot .
-        (slot < slotAmount) ->
+        r_rejectRequest(slotAmount) . setDisplay(StorageFull) .
+        UserInterface
+        +
+        sum slot: Slot . (slot < slotAmount) ->
           (
-            r_acceptRequest(slot) . 
+            r_acceptRequest(slot) .
             r_operationCompleted .
-            setDisplay(displaySlot(slot)) 
-            + 
-            r_rejectRequest(slot) . 
-            setDisplay(StorageFull)
+            setDisplay(displaySlot(slot)) .
+            UserInterface
           )
-      ) .
-      UserInterface
-    ) 
-    +
-    (
+      )
+      +
       sum slot: Slot . (slot < slotAmount) ->
         requestRetrieval(slot) . s_requestPickupSlot(slot) .
-        (
-          r_acceptRequest(slot) . r_operationCompleted .
-                                  setDisplay(displaySlot(slot)) + 
-          r_rejectRequest(slot) . setDisplay(ItemNotFound)
-        ) .
-        UserInterface
+          (
+            r_rejectRequest(slot) . setDisplay(ItemNotFound) .
+            UserInterface
+            +
+            r_acceptRequest(slot) . r_operationCompleted .
+            setDisplay(displaySlot(slot)) . UserInterface
+          )
     );
 
-  StorageController(occupancy: FSet(Slot)) = 
+  StorageController(occupancy: FSet(Slot)) =
     (
-      sum slot: Slot . (slot < slotAmount) ->
+      sum slot: Slot . (slot < slotAmount && slot in occupancy) ->
         (
-          r_requestPickupSlot(slot) .
-            (
-              !(slot in occupancy) ->
-                s_rejectRequest(slot) .
-                StorageController(occupancy)
-              +
-              (slot in occupancy) ->
-                s_acceptRequest(slot) . s_armMoveToSlot(slot) .
-                r_armOperationCompleted . s_operationCompleted .
-                StorageController(occupancy - {slot})
-            )
+          r_requestPickupSlot(slot) . s_acceptRequest(slot) .
+          s_armMoveToSlot(slot)     . r_armOperationCompleted .
+          s_armRequestPickup(slot)  . r_armOperationCompleted .
+          s_armRequestReturn(slot)  . r_armOperationCompleted .
+          s_armRequestHandoff(slot) . r_armOperationCompleted .
+          s_operationCompleted . StorageController(occupancy - {slot})
         )
     )
     +
     (
-      sum empty_slot: Nat . 
-      (empty_slot == find_empty(0, occupancy)) ->
+      sum empty_slot: Nat .
+      (empty_slot == find_empty(0, occupancy) && empty_slot < slotAmount) ->
         (
-          r_requestStoreSlot .
-          (
-            (empty_slot < slotAmount) ->
-              s_acceptRequest(empty_slot) .
-              s_armMoveToSlot(empty_slot) .
-              r_armOperationCompleted .
-              s_operationCompleted .
-              StorageController(occupancy + {empty_slot})
-            +
-            (empty_slot == slotAmount) ->
-              s_rejectRequest(empty_slot) .
-              StorageController(occupancy)
-          )
+          r_requestStoreSlot              . s_acceptRequest(empty_slot) .
+          s_armRequestPickup(empty_slot)  . r_armOperationCompleted .
+          s_armMoveToSlot(empty_slot)     . r_armOperationCompleted .
+          s_armRequestHandoff(empty_slot) . r_armOperationCompleted .
+          s_armRequestReturn(empty_slot)  . r_armOperationCompleted .
+          s_operationCompleted . StorageController(occupancy + {empty_slot})
         )
-    ) +
-    (
-      r_requestHandout . 
-      r_armOperationCompleted . 
-      StorageController(occupancy)
     );
 
-  FollowRoute(
-    trace: List(Movement),
-    route: List(Movement),
-    movingToSlot: Bool
-  ) =
+  ArmFollowRoute(route: List(Movement)) =
     (route == []) ->
-      s_armOperationCompleted . 
-      (movingToSlot -> ArmController(trace) <> ArmController(route))
+      (
+        s_armOperationCompleted . ArmController
+        +
+        r_armEmergency . r_armRecovery . ArmFollowRoute(route)
+      )
     <>
       (
-        setMovement(head(route)) + 
         (
-          r_initiateEmergency .
-          movingToSlot 
-            -> ArmController(reverseRoute(trace)) 
-            <> ArmController(route)
+          r_armEmergency . r_armRecovery . ArmFollowRoute(route)
         )
-      ) .
-      (
-        gridReached(axis(head(route))) .
-        FollowRoute(trace ++ [head(route)], tail(route), movingToSlot)
         +
-        r_initiateEmergency .
-        setMovement(movement(axis(head(route)), Stop)) .
-        movingToSlot 
-          % NOTE(Jorens): We did not finish movement (a, s)
-          % If-case: we take the current movement backwards and continue with
-          % the reverse.
-          % Else-case: We need to finish the current move and continue the
-          % route, which just correspond to the route.
-          % trace: X+, X+, Y+, Z+
-          % head:  Y+
-          % route: ....
-          -> ArmController(reverseRoute(trace ++ [head(route)])) 
-          <> ArmController(route)
+        (
+          setMovement(head(route)) .
+          (
+            gridReached(axis(head(route))) .
+            setMovement(movement(axis(head(route)), Stop)) .
+            ArmFollowRoute(tail(route))
+            +
+            r_armEmergency .
+            setMovement(movement(axis(head(route)), Stop)) .
+            r_armRecovery .
+            ArmFollowRoute(route)
+          )
+        )
       );
 
-  ArmController(returnRoute: List(Movement)) = 
+  ArmController = 
     (
-      r_initiateRecovery . 
-      FollowRoute([], returnRoute, false)
+      r_armEmergency . r_armRecovery . ArmController
     )
     +
     (
-      r_requestHandout . 
-      disengageGripper .
-      ArmController([])
+      sum s: Slot . r_armMoveToSlot(s). ArmFollowRoute(slotRoute(s))
     )
     +
     (
-      sum slot: Slot . (slot < slotAmount) -> 
-        (
-          r_armMoveToSlot(slot) .
-          FollowRoute([], slotRoute(slot), true) 
-          +
-          r_armReturnToPickup(slot) .
-          FollowRoute([], reverseRoute(slotRoute(slot)), false)
-        )
+      sum s: Slot . r_armRequestReturn(s) .
+      ArmFollowRoute(reverseRoute(slotRoute(s)))
+    )
+    +
+    (
+      sum s: Slot . r_armRequestPickup(s)  . engageGripper .
+      s_armOperationCompleted . ArmController
+    )
+    +
+    (
+      sum s: Slot . r_armRequestHandoff(s) . disengageGripper .
+      s_armOperationCompleted . ArmController
     );
 
 init
@@ -292,33 +249,35 @@ init
       objectAtPickup, objectInGripper, requestStorage, requestRetrieval,
       storageComplete, retrievalComplete, setDisplay, setErrorLight,
       setEmergencyLight, emergencyPressed, emergencyReleased, resetError,
-      comm_initiateEmergency, comm_initiateRecovery, comm_acceptRequest,
-      comm_rejectRequest, comm_requestPickupSlot, 
-      comm_requestStoreSlot, comm_operationCompleted,
-      comm_armMoveToSlot, comm_armReturnToPickup, comm_armOperationCompleted,
-      comm_requestHandout
+      comm_acceptRequest, comm_rejectRequest, comm_requestPickupSlot,
+      comm_requestStoreSlot, comm_operationCompleted, comm_armMoveToSlot,
+      comm_armEmergency, comm_armRecovery, comm_armRequestReturn,
+      comm_armRequestPickup, comm_armRequestHandoff, comm_armOperationCompleted
     },
     comm(
       {
-        s_acceptRequest         | r_acceptRequest         -> comm_acceptRequest,
-        s_rejectRequest         | r_rejectRequest         -> comm_rejectRequest,
-        s_requestPickupSlot     | r_requestPickupSlot     -> comm_requestPickupSlot,
-        % s_requestReturnPickup | r_requestReturnPickup   -> comm_requestReturnPickup,
-        s_requestStoreSlot      | r_requestStoreSlot      -> comm_requestStoreSlot,
-        s_operationCompleted    | r_operationCompleted    -> comm_operationCompleted,
-        s_armMoveToSlot         | r_armMoveToSlot         -> comm_armMoveToSlot,
-        s_armReturnToPickup     | r_armReturnToPickup     -> comm_armReturnToPickup,
-        s_armOperationCompleted | r_armOperationCompleted -> comm_armOperationCompleted,
-        s_initiateEmergency     | r_initiateEmergency     -> comm_initiateEmergency,
-        s_initiateRecovery      | r_initiateRecovery      -> comm_initiateRecovery,
-        s_requestHandout        | r_requestHandout        -> comm_requestHandout
+        s_acceptRequest | r_acceptRequest -> comm_acceptRequest,
+        s_rejectRequest | r_rejectRequest -> comm_rejectRequest,
+        s_requestPickupSlot | r_requestPickupSlot -> comm_requestPickupSlot,
+        s_requestStoreSlot | r_requestStoreSlot -> comm_requestStoreSlot,
+        s_operationCompleted | r_operationCompleted -> comm_operationCompleted,
+        s_armMoveToSlot | r_armMoveToSlot -> comm_armMoveToSlot,
+        s_armOperationCompleted | r_armOperationCompleted 
+          -> comm_armOperationCompleted,
+        s_armEmergency | r_armEmergency -> comm_armEmergency,
+        s_armRecovery | r_armRecovery -> comm_armRecovery,
+        s_armRequestReturn  |  r_armRequestReturn ->  comm_armRequestReturn,
+        s_armRequestPickup  |  r_armRequestPickup ->  comm_armRequestPickup,
+        s_armRequestHandoff | r_armRequestHandoff -> comm_armRequestHandoff
       },
-      EmergencyController(false)
-      ||
-      UserInterface   
-      ||
-      StorageController({}) 
-      || 
-      ArmController([])
+      (
+        EmergencyController(false)
+        ||
+        UserInterface
+        ||
+        StorageController({}) 
+        || 
+        ArmController
+      )
     )
   );
