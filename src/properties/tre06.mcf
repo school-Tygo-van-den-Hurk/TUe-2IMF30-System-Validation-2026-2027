@@ -1,0 +1,27 @@
+nu X(
+  s_x: MotorState = Stop,
+  s_y: MotorState = Stop,
+  s_z: MotorState = Stop
+) . (
+  (
+      (val(s_x != Stop) => (val(s_y == Stop) && val(s_z == Stop))) &&
+      (val(s_y != Stop) => (val(s_x == Stop) && val(s_z == Stop))) &&
+      (val(s_z != Stop) => (val(s_x == Stop) && val(s_y == Stop)))
+  )
+  && 
+  forall a: Axis, s: MotorState . 
+    [setMovement(movement(a, s))] (
+      (val(a == XAxis) => X(s,   s_y, s_z)) &&
+      (val(a == YAxis) => X(s_x, s,   s_z)) &&
+      (val(a == ZAxis) => X(s_x, s_y, s))
+    ) 
+  &&
+  [
+    !(
+      exists a: Axis,
+      s: MotorState . setMovement(movement(a, s))
+    )
+  ] X(s_x, s_y, s_z)
+)
+% NOTE(Jorens): Not monotonic?.. Investigate
+% NOTE(Jorens): Safety -> nu X . (InvariantHolds && [true] X)
