@@ -1,16 +1,15 @@
 sort
   Axis = struct XAxis | YAxis | ZAxis;
-  % NOTE(Jorens): 
-  %  -> UnexpectedItemOnSlot: we just cancel the request and update the
-  %                           storage.
-  %  -> NoItemOnSlot: we just cancel the request and update the occupancy.
+  Rejection = struct
+     SlotEmpty 
+   | SlotBusy
+   | StorageFull 
+   | HandoffBusy;
   DisplayValue = struct 
      displaySlot(Slot)
-   | ItemNotFound
-   | StorageFull 
-   | DropOffBusy
+   | rejection(Rejection)
    | RequestAccepted
-   | OperationCompleted;
+   | RequestCompleted;
   Mode = struct Idle | Working | Emergency | Recovery;
   MotorState = struct Forward | Backward | Stop;
   Movement = struct movement(axis : Axis, state : MotorState);
@@ -96,6 +95,7 @@ eqn
       );
 
   slotAmount = 3;
+
   (s >= slotAmount) -> find_empty(s, occ) = slotAmount;
   (s < slotAmount) && !(s in occ) -> find_empty(s, occ) = s;
   (s < slotAmount) && (s in occ) 
@@ -115,9 +115,12 @@ act
   s_armRecovery, r_armRecovery, comm_armRecovery;
   s_requestStoreSlot, r_requestStoreSlot, comm_requestStoreSlot;
   s_operationCompleted, r_operationCompleted, comm_operationCompleted;
-  s_armOperationCompleted, r_armOperationCompleted, comm_armOperationCompleted;
+
+  s_armCompleted, r_armCompleted, comm_armCompleted;
+  s_armRejected, r_armRejected, comm_armRejected,
+  s_rejectRequest, r_rejectRequest, comm_rejectRequest: Rejection;
+
   s_acceptRequest, r_acceptRequest, comm_acceptRequest,
-  s_rejectRequest, r_rejectRequest, comm_rejectRequest,
   s_requestPickupSlot, r_requestPickupSlot, comm_requestPickupSlot,
   s_armMoveToSlot, r_armMoveToSlot, comm_armMoveToSlot,
   s_armRequestReturn,  r_armRequestReturn,  comm_armRequestReturn,
@@ -141,8 +144,12 @@ proc
     (
       requestStorage . s_requestStoreSlot .
       (
-        r_rejectRequest(slotAmount) . setDisplay(StorageFull) .
-        UserInterface
+        (
+          sum r: Rejection . 
+          r_rejectRequest(r) . 
+          setDisplay(rejection(r)) .
+          UserInterface
+        )
         +
         sum slot: Slot . (slot < slotAmount) ->
           (
@@ -156,11 +163,18 @@ proc
       sum slot: Slot . (slot < slotAmount) ->
         requestRetrieval(slot) . s_requestPickupSlot(slot) .
           (
-            r_rejectRequest(slot) . setDisplay(ItemNotFound) .
-            UserInterface
+            (
+              sum r: Rejection . 
+              r_rejectRequest(r) . 
+              setDisplay(rejection(r)) .
+              UserInterface
+            )
             +
-            r_acceptRequest(slot) . r_operationCompleted .
-            setDisplay(displaySlot(slot)) . UserInterface
+            (
+              r_acceptRequest(slot) . setDisplay(RequestAccepted) .
+              r_operationCompleted . setDisplay(displaySlot(slot)) . 
+              setDisplay(RequestCompleted) . UserInterface
+            )
           )
     );
 
@@ -169,10 +183,10 @@ proc
       sum slot: Slot . (slot < slotAmount && slot in occupancy) ->
         (
           r_requestPickupSlot(slot) . s_acceptRequest(slot) .
-          s_armMoveToSlot(slot)     . r_armOperationCompleted .
-          s_armRequestPickup(slot)  . r_armOperationCompleted .
-          s_armRequestReturn(slot)  . r_armOperationCompleted .
-          s_armRequestHandoff(slot) . r_armOperationCompleted .
+          s_armMoveToSlot(slot)     . r_armCompleted .
+          s_armRequestPickup(slot)  . r_armCompleted .
+          s_armRequestReturn(slot)  . r_armCompleted .
+          s_armRequestHandoff(slot) . r_armCompleted .
           s_operationCompleted . StorageController(occupancy - {slot})
         )
     )
@@ -182,18 +196,33 @@ proc
       (empty_slot == find_empty(0, occupancy) && empty_slot < slotAmount) ->
         (
           r_requestStoreSlot              . s_acceptRequest(empty_slot) .
-          s_armRequestPickup(empty_slot)  . r_armOperationCompleted .
-          s_armMoveToSlot(empty_slot)     . r_armOperationCompleted .
-          s_armRequestHandoff(empty_slot) . r_armOperationCompleted .
-          s_armRequestReturn(empty_slot)  . r_armOperationCompleted .
+          s_armRequestPickup(empty_slot)  . r_armCompleted .
+          s_armMoveToSlot(empty_slot)     . r_armCompleted .
+          s_armRequestHandoff(empty_slot) . r_armCompleted .
+          s_armRequestReturn(empty_slot)  . r_armCompleted .
           s_operationCompleted . StorageController(occupancy + {empty_slot})
         )
+    )
+    +
+    (
+      (find_empty(0, occupancy) >= slotAmount) -> 
+        r_requestStoreSlot .
+        s_rejectRequest(StorageFull) .
+        StorageController(occupancy)
+    )
+    +
+    (
+      sum slot: Slot . (slot < slotAmount && !(slot in occupancy)) -> 
+        r_requestPickupSlot(slot) .
+        s_rejectRequest(SlotEmpty) . 
+        StorageController(occupancy)
     );
+
 
   ArmFollowRoute(route: List(Movement)) =
     (route == []) ->
       (
-        s_armOperationCompleted . ArmController
+        s_armCompleted . ArmController
         +
         r_armEmergency . r_armRecovery . ArmFollowRoute(route)
       )
@@ -234,12 +263,12 @@ proc
     +
     (
       sum s: Slot . r_armRequestPickup(s)  . engageGripper .
-      s_armOperationCompleted . ArmController
+      s_armCompleted . ArmController
     )
     +
     (
       sum s: Slot . r_armRequestHandoff(s) . disengageGripper .
-      s_armOperationCompleted . ArmController
+      s_armCompleted . ArmController
     );
 
 init
@@ -252,7 +281,7 @@ init
       comm_acceptRequest, comm_rejectRequest, comm_requestPickupSlot,
       comm_requestStoreSlot, comm_operationCompleted, comm_armMoveToSlot,
       comm_armEmergency, comm_armRecovery, comm_armRequestReturn,
-      comm_armRequestPickup, comm_armRequestHandoff, comm_armOperationCompleted
+      comm_armRequestPickup, comm_armRequestHandoff, comm_armCompleted
     },
     comm(
       {
@@ -262,8 +291,7 @@ init
         s_requestStoreSlot | r_requestStoreSlot -> comm_requestStoreSlot,
         s_operationCompleted | r_operationCompleted -> comm_operationCompleted,
         s_armMoveToSlot | r_armMoveToSlot -> comm_armMoveToSlot,
-        s_armOperationCompleted | r_armOperationCompleted 
-          -> comm_armOperationCompleted,
+        s_armCompleted | r_armCompleted -> comm_armCompleted,
         s_armEmergency | r_armEmergency -> comm_armEmergency,
         s_armRecovery | r_armRecovery -> comm_armRecovery,
         s_armRequestReturn  |  r_armRequestReturn ->  comm_armRequestReturn,
