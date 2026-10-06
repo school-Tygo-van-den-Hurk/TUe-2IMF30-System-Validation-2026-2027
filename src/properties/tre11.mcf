@@ -1,0 +1,16 @@
+nu X(
+  mode: Mode = Idle
+) .
+(
+  (
+    val(mode == Emergency) => 
+      [engageGripper + disengageGripper]false
+  ) &&
+
+  [emergencyPressed] X(Emergency) &&
+  [emergencyReleased] X(Idle) &&
+  [
+    !(emergencyPressed || emergencyReleased)
+  ] X(mode)
+)
+

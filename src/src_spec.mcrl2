@@ -1,12 +1,14 @@
 sort
   Axis = struct XAxis | YAxis | ZAxis;
   Rejection = struct
-     SlotEmpty 
+     NoRejection
+   | NothingToPick
+   | SlotEmpty 
    | SlotBusy
    | StorageFull 
    | HandoffBusy;
   DisplayValue = struct 
-     rejection(Rejection)
+     reject(Rejection)
    | accept(Slot)
    | complete(Slot);
   MotorState = struct Forward | Backward | Stop;
@@ -117,8 +119,8 @@ act
   s_acceptRequest, r_acceptRequest, comm_acceptRequest,
   s_requestPickupSlot, r_requestPickupSlot, comm_requestPickupSlot,
   s_armMoveToSlot, r_armMoveToSlot, comm_armMoveToSlot,
-  s_armRequestReturn, r_armRequestReturn, comm_armRequestReturn,
-  s_armRequestPickup, r_armRequestPickup, comm_armRequestPickup: Slot;
+  s_armRequestReturn, r_armRequestReturn, comm_armRequestReturn: Slot;
+  s_armRequestPickup, r_armRequestPickup, comm_armRequestPickup;
 
   s_armRequestHandoff, r_armRequestHandoff, comm_armRequestHandoff: Bool;
 
@@ -142,7 +144,7 @@ proc
         (
           sum r: Rejection . 
           r_rejectRequest(r) . 
-          setDisplay(rejection(r)) .
+          setDisplay(reject(r)) .
           UserInterface
         )
         +
@@ -164,7 +166,7 @@ proc
           (
             sum r: Rejection . 
             r_rejectRequest(r) . 
-            setDisplay(rejection(r)) .
+            setDisplay(reject(r)) .
             UserInterface
           )
           +
@@ -177,11 +179,13 @@ proc
     )
     +
     (
-      r_clearHandoff . setDisplay(rejection(HandoffBusy)) .
+      r_clearHandoff . setDisplay(reject(HandoffBusy)) .
       handoffClearedBtn . s_handoffCleared . UserInterface
     );
 
-  StorageClearHandoff(occupancy: FSet(Slot), slot: Slot, rejectOnDone: Bool) =
+  StorageClearHandoff(
+    occupancy: FSet(Slot), slot: Slot, rejection: Rejection
+  ) =
     s_armRequestHandoff(false) . 
     (
       (
@@ -190,21 +194,32 @@ proc
       +
       (
         r_armRejected(HandoffBusy) . s_clearHandoff .
-        r_handoffCleared . StorageClearHandoff(occupancy, slot, rejectOnDone)
+        r_handoffCleared . StorageClearHandoff(occupancy, slot, rejection)
       )
     ) .
-    (rejectOnDone) -> s_operationCompleted <> s_rejectRequest(SlotBusy) .
+    (rejection == NoRejection) 
+      -> s_operationCompleted 
+      <> s_rejectRequest(rejection) .
     StorageController(occupancy - {slot});
 
   StorageController(occupancy: FSet(Slot)) =
     (
       sum slot: Slot . (slot < slotAmount && slot in occupancy) ->
         (
-          r_requestPickupSlot(slot)  . s_acceptRequest(slot) .
-          s_armMoveToSlot(slot)      . r_armCompleted .
-          s_armRequestPickup(slot)   . r_armCompleted .
-          s_armRequestReturn(slot)   . r_armCompleted .
-          StorageClearHandoff(occupancy, slot, true)
+          r_requestPickupSlot(slot) . s_acceptRequest(slot) .
+          s_armMoveToSlot(slot) . r_armCompleted .
+          s_armRequestPickup . 
+          (
+            (
+              r_armCompleted . s_armRequestReturn(slot) . r_armCompleted .
+              StorageClearHandoff(occupancy, slot, NoRejection)
+            )
+            +
+            (
+              r_armRejected(NothingToPick) . s_armRequestReturn(slot) .
+              r_armCompleted . StorageClearHandoff(occupancy, slot, SlotEmpty)
+            )
+          )
         )
     )
     +
@@ -212,21 +227,29 @@ proc
       sum empty_slot: Nat .
       (empty_slot == find_empty(0, occupancy) && empty_slot < slotAmount) ->
         (
-          r_requestStoreSlot              . s_acceptRequest(empty_slot) .
-          s_armRequestPickup(empty_slot)  . r_armCompleted .
-          s_armMoveToSlot(empty_slot)     . r_armCompleted .
-          s_armRequestHandoff(true) .
+          r_requestStoreSlot . s_acceptRequest(empty_slot) .
+          s_armRequestPickup . 
           (
             (
-              r_armCompleted .
-              s_armRequestReturn(empty_slot) . r_armCompleted .
-              s_operationCompleted .
-              StorageController(occupancy + {empty_slot})
+              r_armRejected(NothingToPick) . r_rejectRequest(NothingToPick) .
+              StorageController(occupancy)
             ) +
             (
-              r_armRejected(SlotBusy) . 
-              s_armRequestReturn(empty_slot) . r_armCompleted .
-              StorageClearHandoff(occupancy, empty_slot, false)
+              r_armCompleted . s_armMoveToSlot(empty_slot) . r_armCompleted .
+              s_armRequestHandoff(true) .
+              (
+                (
+                  r_armCompleted .
+                  s_armRequestReturn(empty_slot) . r_armCompleted .
+                  s_operationCompleted .
+                  StorageController(occupancy + {empty_slot})
+                ) +
+                (
+                  r_armRejected(SlotBusy) . 
+                  s_armRequestReturn(empty_slot) . r_armCompleted .
+                  StorageClearHandoff(occupancy, empty_slot, NoRejection)
+                )
+              )
             )
           )
         )
@@ -290,9 +313,17 @@ proc
     )
     +
     (
-      sum s: Slot . r_armRequestPickup(s)  . engageGripper .
-      s_armCompleted . ArmController
-    )
+      sum s: Slot . r_armRequestPickup . 
+      (
+        (
+          objectAtPickup(true) . engageGripper . s_armCompleted . ArmController
+        )
+        +
+        (
+          objectAtPickup(false) . s_armRejected(NothingToPick) . ArmController
+        )
+      )
+    ) 
     +
     % NOTE(Jorens): True - slot, False - handoff.
     (
@@ -329,7 +360,7 @@ init
   allow(
     {
       setMovement, gridReached, engageGripper, disengageGripper,
-      objectAtPickup, objectInGripper, requestStorage, requestRetrieval,
+      objectAtPickup, requestStorage, requestRetrieval,
       setDisplay, setErrorLight, setEmergencyLight, emergencyPressed,
       emergencyReleased, 
       comm_acceptRequest, comm_rejectRequest, comm_requestPickupSlot,
