@@ -110,6 +110,7 @@ act
   s_requestStoreSlot, r_requestStoreSlot, comm_requestStoreSlot,
   s_operationCompleted, r_operationCompleted, comm_operationCompleted,
   s_clearHandoff, r_clearHandoff, comm_clearHandoff,
+  s_opAllowed, r_opAllowed, comm_opAllowed,
   s_handoffCleared, r_handoffCleared, comm_handoffCleared;
 
   s_armCompleted, r_armCompleted, comm_armCompleted;
@@ -127,15 +128,30 @@ act
 proc
 
   EmergencyController(isEmergency: Bool) =
-    !(isEmergency) ->
-      emergencyPressed .
-      s_armEmergency .
-      EmergencyController(true)
+    (
+      !(isEmergency) ->
+        (
+          (
+            emergencyPressed .
+            s_armEmergency .
+            EmergencyController(true)
+          )
+          +
+          (
+            % NOTE(Jorens): continuously allow normal ops.
+            s_opAllowed . EmergencyController(false) 
+          )
+        )
+    )
     +
-    isEmergency ->
-      emergencyReleased .
-      s_armRecovery . 
-      EmergencyController(false);
+    (
+      isEmergency ->
+      (
+        emergencyReleased .
+        s_armRecovery . 
+        EmergencyController(false)
+      )
+    );
 
   UserInterface =
     (
@@ -298,6 +314,24 @@ proc
         )
       );
 
+  ArmEngage = 
+    (
+      r_armEmergency . r_armRecovery . ArmEngage
+    )
+    +
+    (
+      s_opAllowed . engageGripper . s_armCompleted . ArmController
+    );
+
+  ArmDisengage = 
+    (
+      r_armEmergency . r_armRecovery . ArmDisengage
+    )
+    +
+    (
+      s_opAllowed . disengageGripper . s_armCompleted . ArmController
+    );
+
   ArmController = 
     (
       r_armEmergency . r_armRecovery . ArmController
@@ -316,11 +350,13 @@ proc
       sum s: Slot . r_armRequestPickup . 
       (
         (
-          objectAtPickup(true) . engageGripper . s_armCompleted . ArmController
+          objectAtPickup(true) . ArmEngage
         )
         +
         (
-          objectAtPickup(false) . s_armRejected(NothingToPick) . ArmController
+          objectAtPickup(false) . 
+          s_armRejected(NothingToPick) . 
+          ArmController
         )
       )
     ) 
@@ -329,13 +365,13 @@ proc
       sum b: Bool . r_armRequestHandoff(b) . 
       ( % NOTE(Jorens): True - slot, False - handoff.
         (
-          objectAtPickup(true) . s_armRejected(if(b, SlotBusy, HandoffBusy)) .
+          objectAtPickup(true) .
+          s_armRejected(if(b, SlotBusy, HandoffBusy)) .
           ArmController
         )
         +
         (
-          objectAtPickup(false) . disengageGripper . s_armCompleted .
-          ArmController
+          objectAtPickup(false) . ArmDisengage
         )
       )
     );
@@ -351,7 +387,7 @@ init
       comm_requestStoreSlot, comm_operationCompleted, comm_armMoveToSlot,
       comm_armEmergency, comm_armRecovery, comm_armRequestReturn,
       comm_armRequestPickup, comm_armRequestHandoff, comm_armCompleted,
-      comm_clearHandoff, comm_handoffCleared, comm_armRejected
+      comm_clearHandoff, comm_handoffCleared, comm_armRejected, comm_opAllowed
     },
     comm(
       {
@@ -369,7 +405,8 @@ init
         s_armRequestHandoff | r_armRequestHandoff -> comm_armRequestHandoff,
         s_clearHandoff   | r_clearHandoff   -> comm_clearHandoff,
         s_handoffCleared | r_handoffCleared -> comm_handoffCleared,
-        s_armRejected    | r_armRejected -> comm_armRejected
+        s_armRejected    | r_armRejected -> comm_armRejected,
+        s_opAllowed | r_opAllowed -> comm_opAllowed
       },
       (
         EmergencyController(false) || UserInterface || StorageController({}) 

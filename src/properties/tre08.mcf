@@ -1,3 +1,5 @@
+% solve report:(tre08:Property TRE08)
+
 nu X(
   s_x: MotorState = Stop,
   s_y: MotorState = Stop,

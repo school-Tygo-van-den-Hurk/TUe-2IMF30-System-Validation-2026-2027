@@ -1,0 +1,60 @@
+nu X(
+  mode: Mode = Idle,
+  x_s: MotorState = Stop,
+  y_s: MotorState = Stop,
+  z_s: MotorState = Stop
+) .
+(
+  (val(mode == Emergency && x_s != Stop) => 
+    (
+      % 1. Forbid any new movement commands (s != Stop) on XAxis
+      [
+        exists s: MotorState . 
+        (val(s != Stop) && setMovement(movement(XAxis, s)))
+      ] false 
+      && 
+      % 2. It must inevitably Stop
+      mu Y . ([!setMovement(movement(XAxis, Stop))]Y && <true>true)
+    )
+  ) 
+  &&
+
+  % Y-Axis Check
+  (val(mode == Emergency && y_s != Stop) => 
+    (
+      [
+        exists s: MotorState . 
+        (val(s != Stop) && setMovement(movement(YAxis, s)))
+      ] false 
+      && 
+      mu Y . ([!setMovement(movement(YAxis, Stop))]Y && <true>true)
+    )
+  )
+  &&
+
+  % Z-Axis Check
+  (val(mode == Emergency && z_s != Stop) => 
+    (
+      [
+        exists s: MotorState .
+        (val(s != Stop) && setMovement(movement(ZAxis, s)))
+      ] false 
+      && 
+      mu Y . ([!setMovement(movement(ZAxis, Stop))]Y && <true>true)
+    )
+  )
+  &&
+
+  [emergencyPressed] X(Emergency, x_s, y_s, z_s) &&
+  [emergencyReleased] X(Idle, x_s, y_s, z_s) &&
+  (forall s: MotorState . [setMovement(movement(XAxis, s))] X(mode, s, y_s, z_s)) &&
+  (forall s: MotorState . [setMovement(movement(YAxis, s))] X(mode, x_s, s, z_s)) &&
+  (forall s: MotorState . [setMovement(movement(ZAxis, s))] X(mode, x_s, y_s, s)) &&
+
+  [
+    !(
+      emergencyPressed || emergencyReleased || 
+      exists a: Axis, s: MotorState . setMovement(movement(a, s))
+    )
+  ] X(mode, x_s, y_s, z_s)
+)

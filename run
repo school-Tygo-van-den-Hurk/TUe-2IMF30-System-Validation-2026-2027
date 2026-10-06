@@ -96,7 +96,7 @@ function cmd_solve() {
             rm -rf ./evidence
             mkdir -p ./evidence
 
-            for pbes_file in ./pbes/*.pbes; do
+            for pbes_file in ./pbes/tre*.pbes; do
                 [[ -e "$pbes_file" ]] || break
                 
                 PBES_BASE=$(basename -- "$pbes_file")
