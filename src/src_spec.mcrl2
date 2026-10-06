@@ -43,56 +43,50 @@ eqn
 
   slotRoute(0) = 
     [
-      movement(XAxis, Backward),
-      movement(YAxis, Forward),
-      movement(YAxis, Forward),
-      movement(XAxis, Forward)
+      movement(XAxis, Backward), movement(YAxis, Forward),
+      movement(YAxis, Forward), movement(XAxis, Forward)
     ];
   slotRoute(1) = 
     [
-      movement(XAxis, Backward),
-      movement(YAxis, Forward),
-      movement(YAxis, Forward),
-      movement(ZAxis, Forward),
+      movement(XAxis, Backward), movement(YAxis, Forward),
+      movement(YAxis, Forward), movement(ZAxis, Forward),
       movement(XAxis, Forward)
     ];
   slotRoute(2) = 
     [
-      movement(XAxis, Backward),
-      movement(YAxis, Forward),
-      movement(YAxis, Forward),
-      movement(ZAxis, Backward),
+      movement(XAxis, Backward), movement(YAxis, Forward),
+      movement(YAxis, Forward), movement(ZAxis, Backward),
       movement(XAxis, Forward)
     ];
 
   routeEndpointFrom(p, []) = p;
   routeEndpointFrom(p, m |> ms) = routeEndpointFrom(movePos(m, p), ms);
   movePos(m, p) =
+    if(
+      state(m) == Forward,
       if(
-        state(m) == Forward,
+        axis(m) == XAxis,
+        pos(x(p) + 1, y(p), z(p)),
         if(
-          axis(m) == XAxis,
-          pos(x(p) + 1, y(p), z(p)),
-          if(
-            axis(m) == YAxis,
-            pos(x(p), y(p) + 1, z(p)),
-            pos(x(p), y(p), z(p) + 1)
-          )
-        ),
-        if(
-          state(m) == Backward,
-          if(
-              axis(m) == XAxis,
-              pos(x(p) - 1, y(p), z(p)),
-              if(
-                  axis(m) == YAxis,
-                  pos(x(p), y(p) - 1, z(p)),
-                  pos(x(p), y(p), z(p) - 1)
-              )
-          ),
-          p
+          axis(m) == YAxis,
+          pos(x(p), y(p) + 1, z(p)),
+          pos(x(p), y(p), z(p) + 1)
         )
-      );
+      ),
+      if(
+        state(m) == Backward,
+        if(
+            axis(m) == XAxis,
+            pos(x(p) - 1, y(p), z(p)),
+            if(
+                axis(m) == YAxis,
+                pos(x(p), y(p) - 1, z(p)),
+                pos(x(p), y(p), z(p) - 1)
+            )
+        ),
+        p
+      )
+    );
 
   slotAmount = 3;
 
