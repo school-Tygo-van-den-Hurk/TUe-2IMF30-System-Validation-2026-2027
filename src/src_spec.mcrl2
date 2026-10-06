@@ -325,27 +325,11 @@ proc
       )
     ) 
     +
-    % NOTE(Jorens): True - slot, False - handoff.
     (
-      r_armRequestHandoff(true) .
-      (
+      sum b: Bool . r_armRequestHandoff(b) . 
+      ( % NOTE(Jorens): True - slot, False - handoff.
         (
-          objectAtPickup(true) . s_armRejected(SlotBusy) .
-          ArmController
-        )
-        +
-        (
-          objectAtPickup(false) . disengageGripper . s_armCompleted .
-          ArmController
-        )
-      )
-    )
-    +
-    (
-      r_armRequestHandoff(false) . 
-      (
-        (
-          objectAtPickup(true) . s_armRejected(HandoffBusy) .
+          objectAtPickup(true) . s_armRejected(if(b, SlotBusy, HandoffBusy)) .
           ArmController
         )
         +
