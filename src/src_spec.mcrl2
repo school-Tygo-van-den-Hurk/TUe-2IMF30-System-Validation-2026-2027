@@ -6,15 +6,14 @@ sort
    | StorageFull 
    | HandoffBusy;
   DisplayValue = struct 
-     displaySlot(Slot)
-   | rejection(Rejection)
-   | RequestAccepted
-   | RequestCompleted;
-  Mode = struct Idle | Working | Emergency | Recovery;
+     rejection(Rejection)
+   | accept(Slot)
+   | complete(Slot);
   MotorState = struct Forward | Backward | Stop;
   Movement = struct movement(axis : Axis, state : MotorState);
-  Position = struct pos(x : Int, y : Int, z: Int);
   Slot = Nat;
+  Mode = struct Idle | Working | Emergency;
+  Position = struct pos(x : Int, y : Int, z: Int);
 
 map
   oppositeState     : MotorState -> MotorState; % add to spec.
@@ -31,6 +30,7 @@ var
   p   : Position;
   s   : Nat; 
   occ : FSet(Slot);
+
 eqn
   
   oppositeState(Forward)  = Backward;
@@ -155,8 +155,9 @@ proc
         sum slot: Slot . (slot < slotAmount) ->
           (
             r_acceptRequest(slot) .
+            setDisplay(accept(slot)) .
             r_operationCompleted .
-            setDisplay(displaySlot(slot)) .
+            setDisplay(complete(slot)) .
             UserInterface
           )
       )
@@ -174,16 +175,16 @@ proc
           )
           +
           (
-            r_acceptRequest(slot) . setDisplay(RequestAccepted) .
-            r_operationCompleted . setDisplay(displaySlot(slot)) . 
-            setDisplay(RequestCompleted) . UserInterface
+            r_acceptRequest(slot) . setDisplay(accept(slot)) .
+            r_operationCompleted . setDisplay(complete(slot)) . 
+            UserInterface
           )
         )
     )
     +
     (
-      r_clearHandoff . handoffClearedBtn . s_handoffCleared .
-      UserInterface
+      r_clearHandoff . setDisplay(rejection(HandoffBusy)) .
+      handoffClearedBtn . s_handoffCleared . UserInterface
     );
 
   StorageClearHandoff(occupancy: FSet(Slot), slot: Slot, rejectOnDone: Bool) =
