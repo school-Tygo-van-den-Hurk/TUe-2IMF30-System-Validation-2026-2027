@@ -1,10 +1,12 @@
 nu X(
   mode: Mode = Idle,
+  prevMode: Mode = Idle,
   x_s: MotorState = Stop,
   y_s: MotorState = Stop,
   z_s: MotorState = Stop
 ) .
 (
+  % X-Axis Check
   (val(mode == Emergency && x_s != Stop) => 
     (
       % 1. Forbid any new movement commands (s != Stop) on XAxis
@@ -45,16 +47,43 @@ nu X(
   )
   &&
 
-  [emergencyPressed] X(Emergency, x_s, y_s, z_s) &&
-  [emergencyReleased] X(Idle, x_s, y_s, z_s) &&
-  (forall s: MotorState . [setMovement(movement(XAxis, s))] X(mode, s, y_s, z_s)) &&
-  (forall s: MotorState . [setMovement(movement(YAxis, s))] X(mode, x_s, s, z_s)) &&
-  (forall s: MotorState . [setMovement(movement(ZAxis, s))] X(mode, x_s, y_s, s)) &&
+  (
+    forall s: MotorState .
+    [setMovement(movement(XAxis, s))] X(mode, mode, s, y_s, z_s)
+  ) &&
+  (
+    forall s: MotorState . 
+    [setMovement(movement(YAxis, s))] X(mode, mode, x_s, s, z_s)
+  ) &&
+  (
+    forall s: MotorState .
+    [setMovement(movement(ZAxis, s))] X(mode, mode, x_s, y_s, s)
+  ) &&
+
+  [emergencyPressed] X(Emergency, mode, x_s, y_s, z_s) &&
+  [emergencyReleased] (
+    val(mode == Emergency) => X(prevMode, prevMode, x_s, y_s, z_s)
+  ) &&
+  (
+    val(mode == Idle) => 
+      [requestStorage] X(Working, prevMode, x_s, y_s, z_s) &&
+      (forall s: Slot . [requestRetrieval(s)] X(Working, prevMode, x_s, y_s, z_s))
+  ) &&
+  (
+    val(mode == Working) => 
+      (forall s: Slot      . [setDisplay(complete(s))] X(Idle, prevMode, x_s, y_s, z_s)) &&
+      (forall r: Rejection . [setDisplay(reject(r))] X(Idle, prevMode, x_s, y_s, z_s))
+  ) &&
 
   [
     !(
-      emergencyPressed || emergencyReleased || 
-      exists a: Axis, s: MotorState . setMovement(movement(a, s))
+      (exists a: Axis, s: MotorState . setMovement(movement(a, s))) ||
+      emergencyPressed || 
+      emergencyReleased || 
+      requestStorage || 
+      (exists s: Slot . requestRetrieval(s)) || 
+      (exists d: DisplayValue . setDisplay(d))
     )
-  ] X(mode, x_s, y_s, z_s)
+  ] X(mode, prevMode, x_s, y_s, z_s)
 )
+

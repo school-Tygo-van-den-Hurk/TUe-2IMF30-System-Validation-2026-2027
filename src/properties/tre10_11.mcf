@@ -1,0 +1,46 @@
+nu X(mode: Mode = Idle, prevMode: Mode = Idle) .
+(
+
+  % NOTE(Jorens): TRE10
+  (val(mode == Emergency) => 
+    (
+      forall a: Axis .
+      [
+        setMovement(movement(a, Forward)) +
+        setMovement(movement(a, Backward))
+      ]false
+    )
+  ) 
+  &&
+
+  % NOTE(Jorens): TRE11
+  (
+    val(mode == Emergency) => 
+      [engageGripper + disengageGripper]false
+  ) &&
+
+  [emergencyPressed] X(Emergency, mode) &&
+  [emergencyReleased] (
+    val(mode == Emergency) => X(prevMode, prevMode)
+  ) &&
+  (
+    val(mode == Idle) => 
+      [requestStorage] X(Working, prevMode) &&
+      (forall s: Slot . [requestRetrieval(s)] X(Working, prevMode))
+  ) &&
+  (
+    val(mode == Working) => 
+      (forall s: Slot      . [setDisplay(complete(s))] X(Idle, prevMode)) &&
+      (forall r: Rejection . [setDisplay(reject(r))] X(Idle, prevMode))
+  ) &&
+
+  [
+    !(
+      emergencyPressed || 
+      emergencyReleased || 
+      requestStorage || 
+      (exists s: Slot . requestRetrieval(s)) || 
+      (exists d: DisplayValue . setDisplay(d))
+    )
+  ] X(mode, prevMode)
+)
