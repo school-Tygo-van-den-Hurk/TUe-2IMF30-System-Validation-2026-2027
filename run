@@ -61,7 +61,7 @@ function cmd_lts() {
             rm -rf ./trc_pp
 
             find . -maxdepth 1 -name '*.trc' -delete
-            lps2lts --trace -D $INPUT.lps $INPUT.lts \
+            lps2lts -v --trace -D $INPUT.lps $INPUT.lts \
                 && echo "./$INPUT.lts" \
                 || echo "Error"
             mkdir -p ./trc
