@@ -1,0 +1,17 @@
+nu X(occupancy: FSet(Slot) = {}, position: Position = pos(0, 0, 0)) .
+(
+
+  (
+    val(#occupancy == slotAmount) =>
+      (
+        [requestStorage] mu Y . (
+          % TODO: The actual requirement.
+          Y
+        )
+      )
+  ) &&
+
+  % TODO: position and occupancy.
+
+  X(occupancy, position)
+)
