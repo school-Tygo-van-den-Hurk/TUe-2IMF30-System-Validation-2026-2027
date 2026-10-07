@@ -101,7 +101,7 @@ act
   engageGripper, disengageGripper, requestStorage, emergencyPressed,
   emergencyReleased, handoffClearedBtn;
 
-  setMovement : Movement; gridReached : Axis; setErrorLight, setEmergencyLight,
+  setMovement : Movement; gridReached : Axis; setEmergencyLight,
   objectAtPickup, objectInGripper: Bool; requestRetrieval: Nat; setDisplay:
   DisplayValue;
 
@@ -133,6 +133,7 @@ proc
         (
           (
             emergencyPressed .
+            setEmergencyLight(true) .
             s_armEmergency .
             EmergencyController(true)
           )
@@ -149,6 +150,7 @@ proc
       (
         emergencyReleased .
         s_armRecovery . 
+        setEmergencyLight(false) .
         EmergencyController(false)
       )
     );
@@ -381,7 +383,7 @@ init
     {
       setMovement, gridReached, engageGripper, disengageGripper,
       objectAtPickup, requestStorage, requestRetrieval,
-      setDisplay, setErrorLight, setEmergencyLight, emergencyPressed,
+      setDisplay, setEmergencyLight, emergencyPressed,
       emergencyReleased, 
       comm_acceptRequest, comm_rejectRequest, comm_requestPickupSlot,
       comm_requestStoreSlot, comm_operationCompleted, comm_armMoveToSlot,
