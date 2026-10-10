@@ -1,19 +1,5 @@
 nu X(mode: Mode = Idle, prevMode: Mode = Idle) .
 (
-
-  % NOTE(Jorens): TRE10
-  (val(mode == Emergency) => 
-    (
-      forall a: Axis .
-      [
-        setMovement(movement(a, Forward)) +
-        setMovement(movement(a, Backward))
-      ]false
-    )
-  ) 
-  &&
-
-  % NOTE(Jorens): TRE11
   (
     val(mode == Emergency) => 
       [engageGripper + disengageGripper]false
