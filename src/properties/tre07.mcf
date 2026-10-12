@@ -1,0 +1,102 @@
+nu X(
+  motorX: MotorState = Stop,
+  motorY: MotorState = Stop,
+  motorZ: MotorState = Stop,
+  position: Position = pos(0, 0, 0),
+  occupancy: FSet(Slot) = {},
+  noObject: Bool = false,
+  removeOnEngage: Bool = false,
+  addOnDisengage: Bool = false
+) .
+(
+  % Disengage only after no object was seen at handoff or at free slot
+  [disengageGripper] (
+    val(noObject) && (
+      val(position == pos(0, 0, 0)) ||
+      exists s: Slot . val(
+        s < slotAmount &&
+        position == routeEndpointFrom(pos(0, 0, 0), slotRoute(s)) &&
+        !(s in occupancy)
+      )
+    )
+  ) &&
+
+
+
+
+  % Remember each motor's direction
+  forall a: Axis, s: MotorState .
+    [setMovement(movement(a, s))] (
+      (val(a == XAxis) => X(s, motorY, motorZ, position, occupancy, noObject, removeOnEngage, addOnDisengage)) &&
+      (val(a == YAxis) => X(motorX, s, motorZ, position, occupancy, noObject, removeOnEngage, addOnDisengage)) &&
+      (val(a == ZAxis) => X(motorX, motorY, s, position, occupancy, noObject, removeOnEngage, addOnDisengage))
+    ) &&
+
+
+
+  % Update position on grid
+  [gridReached(XAxis)] X(motorX, motorY, motorZ, movePos(movement(XAxis, motorX), position), occupancy, false, false, false) &&
+  [gridReached(YAxis)] X(motorX, motorY, motorZ, movePos(movement(YAxis, motorY), position), occupancy, false, false, false) &&
+  [gridReached(ZAxis)] X(motorX, motorY, motorZ, movePos(movement(ZAxis, motorZ), position), occupancy, false, false, false) &&
+
+
+
+  % Update occupancy when above slot s
+  (
+    forall s: Slot .
+    val(s < slotAmount && position == routeEndpointFrom(pos(0, 0, 0), slotRoute(s))) => (
+
+
+      % object seen -> occupied = remove on next engage, free = add now
+      [objectAtPickup(true)] (
+        (val(s in occupancy) => X(motorX, motorY, motorZ, position, occupancy, false, true, false)) &&
+        (val(!(s in occupancy)) => X(motorX, motorY, motorZ, position, occupancy + {s}, false, false, false))
+      ) &&
+
+
+      % no object seen -> occupied = remove now, free = add on next disengage
+      [objectAtPickup(false)] (
+        (val(s in occupancy) => X(motorX, motorY, motorZ, position, occupancy - {s}, true, false, false)) &&
+        (val(!(s in occupancy)) => X(motorX, motorY, motorZ, position, occupancy, true, false, true))
+      ) &&
+
+
+      % engage -> remove s from occupency if it was removeOnEngage = true
+      [engageGripper] (
+        (val(removeOnEngage) => X(motorX, motorY, motorZ, position, occupancy - {s}, false, false, false)) &&
+        (val(!removeOnEngage) => X(motorX, motorY, motorZ, position, occupancy, false, false, false))
+      ) &&
+
+
+      % disengage -> add s to occupency if it was addOnDisengage = true
+      [disengageGripper] (
+        (val(addOnDisengage) => X(motorX, motorY, motorZ, position, occupancy + {s}, false, false, false)) &&
+        (val(!addOnDisengage) => X(motorX, motorY, motorZ, position, occupancy, false, false, false))
+      )
+    )
+  ) &&
+
+
+
+
+  % Not above a slot -> occupancy unchanged, only remember sensor response
+  (
+    (exists s: Slot . val(s < slotAmount && position == routeEndpointFrom(pos(0, 0, 0), slotRoute(s)))) || (
+      [objectAtPickup(true)] X(motorX, motorY, motorZ, position, occupancy, false, false, false) &&
+      [objectAtPickup(false)] X(motorX, motorY, motorZ, position, occupancy, true, false, false) &&
+      [engageGripper || disengageGripper] X(motorX, motorY, motorZ, position, occupancy, false, false, false)
+    )
+  ) &&
+
+
+
+
+  % Any other action -> nothing happens
+  [  !(
+      (exists a: Axis, s: MotorState . setMovement(movement(a, s))) ||
+      (exists a: Axis . gridReached(a)) ||
+      objectAtPickup(true) || objectAtPickup(false) ||
+      engageGripper || disengageGripper
+    )
+  ] X(motorX, motorY, motorZ, position, occupancy, noObject, removeOnEngage, addOnDisengage)
+)

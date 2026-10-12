@@ -16,6 +16,7 @@ sort
   Slot = Nat;
   Mode = struct Idle | Working | Emergency;
   Position = struct pos(x : Int, y : Int, z: Int);
+  Held = struct Nothing | Pickup | item(Slot);
 
 map
   oppositeState     : MotorState -> MotorState; % add to spec.
@@ -99,7 +100,7 @@ eqn
 
 act
   engageGripper, disengageGripper, requestStorage, emergencyPressed,
-  emergencyReleased, handoffClearedBtn;
+  emergencyReleased, handoffCleared;
 
   setMovement : Movement; gridReached : Axis; setEmergencyLight,
   objectAtPickup, objectInGripper: Bool; requestRetrieval: Nat; setDisplay:
@@ -109,8 +110,9 @@ act
   s_armRecovery, r_armRecovery, comm_armRecovery,
   s_requestStoreSlot, r_requestStoreSlot, comm_requestStoreSlot,
   s_operationCompleted, r_operationCompleted, comm_operationCompleted,
-  s_clearHandoff, r_clearHandoff, comm_clearHandoff,
+  s_clearHandoff, r_clearHandoff, clearHandoff,
   s_opAllowed, r_opAllowed, comm_opAllowed,
+  s_opDone, r_opDone, comm_opDone,
   s_handoffCleared, r_handoffCleared, comm_handoffCleared;
 
   s_armCompleted, r_armCompleted, comm_armCompleted;
@@ -140,7 +142,7 @@ proc
           +
           (
             % NOTE(Jorens): continuously allow normal ops.
-            s_opAllowed . EmergencyController(false) 
+            s_opAllowed . r_opDone . EmergencyController(false)
           )
         )
     )
@@ -170,9 +172,7 @@ proc
           (
             r_acceptRequest(slot) .
             setDisplay(accept(slot)) .
-            r_operationCompleted .
-            setDisplay(complete(slot)) .
-            UserInterface
+            WaitCompleted(slot)
           )
       )
     )
@@ -190,35 +190,46 @@ proc
           +
           (
             r_acceptRequest(slot) . setDisplay(accept(slot)) .
-            r_operationCompleted . setDisplay(complete(slot)) . 
-            UserInterface
+            WaitCompleted(slot)
           )
         )
     )
     +
     (
       r_clearHandoff . setDisplay(reject(HandoffBusy)) .
-      handoffClearedBtn . s_handoffCleared . UserInterface
+      handoffCleared . s_handoffCleared . UserInterface
+    );
+
+  WaitCompleted(slot: Slot) =
+    (
+      r_operationCompleted . setDisplay(complete(slot)) . UserInterface
+    )
+    +
+    (
+      r_clearHandoff . setDisplay(reject(HandoffBusy)) .
+      handoffCleared . s_handoffCleared . WaitCompleted(slot)
     );
 
   StorageClearHandoff(
     occupancy: FSet(Slot), slot: Slot, rejection: Rejection
   ) =
-    s_armRequestHandoff(false) . 
+    s_armRequestHandoff(false) .
     (
       (
-        r_armCompleted
+        r_armCompleted .
+        (
+          (rejection == NoRejection)
+            -> s_operationCompleted
+            <> s_rejectRequest(rejection)
+        ) .
+        StorageController(occupancy - {slot})
       )
       +
       (
         r_armRejected(HandoffBusy) . s_clearHandoff .
         r_handoffCleared . StorageClearHandoff(occupancy, slot, rejection)
       )
-    ) .
-    (rejection == NoRejection) 
-      -> s_operationCompleted 
-      <> s_rejectRequest(rejection) .
-    StorageController(occupancy - {slot});
+    );
 
   StorageController(occupancy: FSet(Slot)) =
     (
@@ -302,7 +313,7 @@ proc
         )
         +
         (
-          setMovement(head(route)) .
+          r_opAllowed . setMovement(head(route)) . s_opDone .
           (
             gridReached(axis(head(route))) .
             setMovement(movement(axis(head(route)), Stop)) .
@@ -322,7 +333,7 @@ proc
     )
     +
     (
-      s_opAllowed . engageGripper . s_armCompleted . ArmController
+      r_opAllowed . engageGripper . s_opDone . s_armCompleted . ArmController
     );
 
   ArmDisengage = 
@@ -331,7 +342,7 @@ proc
     )
     +
     (
-      s_opAllowed . disengageGripper . s_armCompleted . ArmController
+      r_opAllowed . disengageGripper . s_opDone . s_armCompleted . ArmController
     );
 
   ArmController = 
@@ -384,12 +395,13 @@ init
       setMovement, gridReached, engageGripper, disengageGripper,
       objectAtPickup, requestStorage, requestRetrieval,
       setDisplay, setEmergencyLight, emergencyPressed,
-      emergencyReleased, 
+      emergencyReleased, handoffCleared,
       comm_acceptRequest, comm_rejectRequest, comm_requestPickupSlot,
       comm_requestStoreSlot, comm_operationCompleted, comm_armMoveToSlot,
       comm_armEmergency, comm_armRecovery, comm_armRequestReturn,
       comm_armRequestPickup, comm_armRequestHandoff, comm_armCompleted,
-      comm_clearHandoff, comm_handoffCleared, comm_armRejected, comm_opAllowed
+      clearHandoff, comm_handoffCleared, comm_armRejected, comm_opAllowed,
+      comm_opDone
     },
     comm(
       {
@@ -405,10 +417,11 @@ init
         s_armRequestReturn  |  r_armRequestReturn ->  comm_armRequestReturn,
         s_armRequestPickup  |  r_armRequestPickup ->  comm_armRequestPickup,
         s_armRequestHandoff | r_armRequestHandoff -> comm_armRequestHandoff,
-        s_clearHandoff   | r_clearHandoff   -> comm_clearHandoff,
+        s_clearHandoff   | r_clearHandoff   -> clearHandoff,
         s_handoffCleared | r_handoffCleared -> comm_handoffCleared,
         s_armRejected    | r_armRejected -> comm_armRejected,
-        s_opAllowed | r_opAllowed -> comm_opAllowed
+        s_opAllowed | r_opAllowed -> comm_opAllowed,
+        s_opDone | r_opDone -> comm_opDone
       },
       (
         EmergencyController(false) || UserInterface || StorageController({}) 
