@@ -1,0 +1,244 @@
+
+nu X(
+  occupancy: FSet(Slot) = {},
+  position: Position = pos(0, 0, 0),
+  x_s: MotorState = Stop,
+  y_s: MotorState = Stop,
+  z_s: MotorState = Stop,
+  pickup_slot: Slot = slotAmount,
+  place_slot: Slot = slotAmount,
+  mode: Mode = Idle,
+  busy: Bool = false,
+  holding: Held = Nothing,
+  phase: Nat = 0,
+  saved: FSet(Slot) = {},
+  tslot: Nat = slotAmount
+) .
+
+(  (val(phase == 1) =>
+    mu Y(p: Position = position, mx: MotorState = x_s,
+         my: MotorState = y_s, mz: MotorState = z_s,
+         hp: Bool = (holding == Pickup)) .
+    (
+      <true>true
+      &&
+      (
+        forall b': Bool .
+        [objectAtPickup(b')]
+        ( val(hp) || Y(p, mx, my, mz, hp) )
+      )
+      &&
+      (
+        forall a: Axis, s: MotorState .
+        [setMovement(movement(a, s))]
+        Y(p, if(a == XAxis, s, mx), if(a == YAxis, s, my),
+          if(a == ZAxis, s, mz), hp)
+      )
+      &&
+      (
+        forall a: Axis .
+        [gridReached(a)]
+        Y(
+          movePos(movement(a, if(a == XAxis, mx, if(a == YAxis, my, mz))), p),
+          mx, my, mz, hp
+        )
+      )
+      &&
+      [engageGripper]
+      Y(
+        p, mx, my, mz,
+        if(p == pos(0, 0, 0), true,
+           if(exists slot: Slot . slot < slotAmount &&
+                p == routeEndpointFrom(pos(0, 0, 0), slotRoute(slot)),
+              false, hp))
+      )
+      &&
+      [disengageGripper]
+      Y(p, mx, my, mz, false)
+      &&
+      [
+        !(
+          (exists b': Bool . objectAtPickup(b'))
+          || (exists a: Axis, s: MotorState . setMovement(movement(a, s)))
+          || (exists a: Axis . gridReached(a))
+          || engageGripper
+          || disengageGripper
+        )
+      ]
+      Y(p, mx, my, mz, hp)
+    )
+  )
+  &&  (val(phase == 2 || phase == 3) =>
+    mu Y . (
+      [!disengageGripper]Y && <true>true
+    )
+  )
+  &&  [requestStorage]
+  X(
+    occupancy, position, x_s, y_s, z_s, pickup_slot, place_slot,
+    if(mode == Emergency, Emergency, Working), true, holding,
+    if(phase == 0 && mode == Idle && #occupancy != slotAmount, 1, phase),
+    if(phase == 0 && mode == Idle && #occupancy != slotAmount, occupancy, saved),
+    if(phase == 0 && mode == Idle && #occupancy != slotAmount,
+       find_empty(0, occupancy), tslot)
+  )
+  &&  (
+    forall s: Slot .
+    [requestRetrieval(s)]
+    X(
+      occupancy, position, x_s, y_s, z_s, pickup_slot, place_slot,
+      if(mode == Emergency, Emergency, Working), true, holding,
+      phase, saved, tslot
+    )
+  )
+  &&  (
+    forall d: DisplayValue .
+    [setDisplay(d)]
+    X(
+      occupancy, position, x_s, y_s, z_s, pickup_slot, place_slot,
+      if(mode == Emergency, Emergency,
+         if(d == reject(NoRejection) || (exists r: Rejection . d == reject(r))
+            || (exists s: Slot . d == complete(s)), Idle, mode)),
+      if((exists r: Rejection . d == reject(r))
+         || (exists s: Slot . d == complete(s)), false, busy),
+      holding, phase, saved, tslot
+    )
+  )
+  &&
+
+  [emergencyPressed]
+  X(
+    occupancy, position, x_s, y_s, z_s, pickup_slot, place_slot,
+    Emergency, busy, holding, phase, saved, tslot
+  )
+  &&
+
+  [emergencyReleased]
+  X(
+    occupancy, position, x_s, y_s, z_s, pickup_slot, place_slot,
+    if(busy, Working, Idle), busy, holding, phase, saved, tslot
+  )
+  &&
+
+  (
+    forall a: Axis, s: MotorState .
+    [setMovement(movement(a, s))]
+    X(
+      occupancy, position,
+      if(a == XAxis, s, x_s), if(a == YAxis, s, y_s), if(a == ZAxis, s, z_s),
+      pickup_slot, place_slot, mode, busy, holding, phase, saved, tslot
+    )
+  )
+  &&  (
+    forall a: Axis .
+    [gridReached(a)]
+    X(
+      occupancy,
+      movePos(movement(a, if(a == XAxis, x_s, if(a == YAxis, y_s, z_s))), position),
+      x_s, y_s, z_s, slotAmount, slotAmount, mode, busy, holding,
+      phase, saved, tslot
+    )
+  )
+  &&  (
+    forall b: Bool .
+    [objectAtPickup(b)]
+    (
+      (
+        forall slot: Slot .
+        (val(slot < slotAmount &&
+             position == routeEndpointFrom(pos(0, 0, 0), slotRoute(slot))) =>
+          X(
+            if(b, occupancy + {slot}, occupancy - {slot}), position,
+            x_s, y_s, z_s,
+            if(b && (slot in occupancy), slot, slotAmount),
+            if(!b && !(slot in occupancy), slot, slotAmount),
+            mode, busy, holding,
+            if(phase == 1 && holding == Pickup, if(b, 3, 2), phase),
+            saved, tslot
+          )
+        )
+      )
+      &&
+      (
+        val(!(exists slot: Slot . slot < slotAmount &&
+              position == routeEndpointFrom(pos(0, 0, 0), slotRoute(slot)))) =>
+        X(
+          occupancy, position, x_s, y_s, z_s, slotAmount, slotAmount,
+          mode, busy, holding,
+          if(phase == 1 && holding == Pickup, if(b, 3, 2), phase),
+          saved, tslot
+        )
+      )
+    )
+  )
+  &&  [engageGripper]
+  (
+    (
+      val(position == pos(0, 0, 0)) =>
+      X(
+        if(pickup_slot < slotAmount, occupancy - {pickup_slot}, occupancy),
+        position, x_s, y_s, z_s, slotAmount, slotAmount,
+        mode, busy, Pickup, phase, saved, tslot
+      )
+    )
+    &&
+    (
+      forall slot: Slot .
+      (val(slot < slotAmount &&
+           position == routeEndpointFrom(pos(0, 0, 0), slotRoute(slot))) =>
+        X(
+          if(pickup_slot < slotAmount, occupancy - {pickup_slot}, occupancy),
+          position, x_s, y_s, z_s, slotAmount, slotAmount,
+          mode, busy, item(slot), phase, saved, tslot
+        )
+      )
+    )
+    &&
+    (
+      val(position != pos(0, 0, 0) &&
+          !(exists slot: Slot . slot < slotAmount &&
+            position == routeEndpointFrom(pos(0, 0, 0), slotRoute(slot)))) =>
+      X(
+        if(pickup_slot < slotAmount, occupancy - {pickup_slot}, occupancy),
+        position, x_s, y_s, z_s, slotAmount, slotAmount,
+        mode, busy, holding, phase, saved, tslot
+      )
+    )
+  )
+  &&  [disengageGripper]
+  (    val(phase == 2 =>
+      (tslot < slotAmount &&
+       position == routeEndpointFrom(pos(0, 0, 0), slotRoute(tslot)) &&
+       (if(place_slot < slotAmount, occupancy + {place_slot}, occupancy))
+         == saved + {tslot}))
+    &&    val(phase == 3 =>
+      (position == pos(0, 0, 0) &&
+       (if(place_slot < slotAmount, occupancy + {place_slot}, occupancy))
+         == saved + {tslot}))
+    &&
+    X(
+      if(place_slot < slotAmount, occupancy + {place_slot}, occupancy),
+      position, x_s, y_s, z_s, slotAmount, slotAmount,
+      mode, busy, Nothing,
+      if(phase >= 2, 0, phase), saved, tslot
+    )
+  )
+  &&  [
+    !(
+      requestStorage
+      || (exists s: Slot . requestRetrieval(s))
+      || (exists d: DisplayValue . setDisplay(d))
+      || emergencyPressed
+      || emergencyReleased
+      || (exists a: Axis, s: MotorState . setMovement(movement(a, s)))
+      || (exists a: Axis . gridReached(a))
+      || (exists b: Bool . objectAtPickup(b))
+      || engageGripper
+      || disengageGripper
+    )
+  ]
+  X(
+    occupancy, position, x_s, y_s, z_s, pickup_slot, place_slot,
+    mode, busy, holding, phase, saved, tslot
+  )
+)
