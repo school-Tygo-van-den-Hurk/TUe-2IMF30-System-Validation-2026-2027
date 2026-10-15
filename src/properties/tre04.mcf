@@ -1,0 +1,175 @@
+% TRE04: reject retrieval from an empty slot in Idle.
+
+
+
+
+
+nu X(
+  occupancy: FSet(Slot) = {},
+  position: Position = pos(0, 0, 0),
+  x_s: MotorState = Stop,
+  y_s: MotorState = Stop,
+  z_s: MotorState = Stop,
+  pickup_slot: Slot = slotAmount,
+  place_slot: Slot = slotAmount,
+  waiting: Bool = false,
+  saved_occupancy: FSet(Slot) = {},
+  mode: Mode = Idle,
+  prevMode: Mode = Idle
+) .
+
+
+
+(
+  val(!waiting || occupancy == saved_occupancy)
+  &&
+
+  % I keep the eventual reply requirement even if emergency interrupts it.
+  (val(waiting) =>
+    mu Y . (
+      [!setDisplay(reject(SlotEmpty))]Y && <true>true
+    )
+  )
+  &&
+
+  [requestStorage]
+  X(
+    occupancy, position, x_s, y_s, z_s,
+    pickup_slot, place_slot, waiting, saved_occupancy,
+    if(mode == Idle, Working, mode), prevMode
+  )
+  &&
+
+  (
+    forall slot: Slot .
+    [requestRetrieval(slot)]
+    X(
+      occupancy, position, x_s, y_s, z_s,
+      pickup_slot, place_slot, waiting || (mode == Idle && !(slot in occupancy)), if(mode == Idle && !(slot in occupancy), occupancy, saved_occupancy),
+      if(mode == Idle, Working, mode), prevMode
+    )
+  )
+  &&
+
+  (
+    forall d: DisplayValue .
+    [setDisplay(d)]
+    X(
+      occupancy, position, x_s, y_s, z_s,
+      pickup_slot, place_slot, if(d == reject(SlotEmpty), false, waiting), saved_occupancy,
+      if(
+        mode == Working &&
+          ((exists r: Rejection . d == reject(r)) ||
+           (exists slot: Slot . d == complete(slot))),
+        Idle, mode
+      ), prevMode
+    )
+  )
+  &&
+
+
+  [emergencyPressed]
+  X(
+    occupancy, position, x_s, y_s, z_s,
+    pickup_slot, place_slot, waiting, saved_occupancy,
+    Emergency, mode
+  )
+  &&
+
+  [emergencyReleased]
+  X(
+    occupancy, position, x_s, y_s, z_s,
+    pickup_slot, place_slot, waiting, saved_occupancy,
+    if(mode == Emergency, prevMode, mode), prevMode
+  )
+  &&
+
+  (
+    forall a: Axis, s: MotorState .
+    [setMovement(movement(a, s))]
+    X(
+      occupancy, position, if(a == XAxis, s, x_s), if(a == YAxis, s, y_s), if(a == ZAxis, s, z_s),
+      pickup_slot, place_slot, waiting, saved_occupancy,
+      mode, prevMode
+    )
+  )
+  &&
+
+
+  (
+    forall a: Axis .
+    [gridReached(a)]
+    X(
+      occupancy, movePos(movement(a, if(a == XAxis, x_s, if(a == YAxis, y_s, z_s))), position), x_s, y_s, z_s,
+      slotAmount, slotAmount, waiting, saved_occupancy,
+      mode, prevMode
+    )
+  )
+  &&
+
+  % Slot sensor readings also correct missing or unexpected items.
+  (
+    forall b: Bool .
+    [objectAtPickup(b)]
+    (
+      (
+        forall slot: Slot .
+        (val(slot < slotAmount &&
+        position == routeEndpointFrom(pos(0, 0, 0), slotRoute(slot))) =>
+          X(
+            if(b, occupancy + {slot}, occupancy - {slot}), position, x_s, y_s, z_s,
+            if(b && (slot in occupancy), slot, slotAmount), if(!b && !(slot in occupancy), slot, slotAmount), waiting, saved_occupancy,
+            mode, prevMode
+          )
+        )
+      ) &&
+      (
+        val(!(exists slot: Slot . slot < slotAmount &&
+        position == routeEndpointFrom(pos(0, 0, 0), slotRoute(slot)))) =>
+        X(
+          occupancy, position, x_s, y_s, z_s,
+          slotAmount, slotAmount, waiting, saved_occupancy,
+          mode, prevMode
+        )
+      )
+    )
+  )
+  &&
+
+  [engageGripper]
+  X(
+    if(pickup_slot < slotAmount, occupancy - {pickup_slot}, occupancy), position, x_s, y_s, z_s,
+    slotAmount, slotAmount, waiting, saved_occupancy,
+    mode, prevMode
+  )
+  &&
+
+  [disengageGripper]
+  X(
+    if(place_slot < slotAmount, occupancy + {place_slot}, occupancy), position, x_s, y_s, z_s,
+    slotAmount, slotAmount, waiting, saved_occupancy,
+    mode, prevMode
+  )
+  &&
+
+
+  [
+    !(
+      (exists a: Axis, s: MotorState . setMovement(movement(a, s)))
+      || (exists a: Axis . gridReached(a))
+      || (exists b: Bool . objectAtPickup(b))
+      || engageGripper
+      || disengageGripper
+      || requestStorage
+      || (exists d: DisplayValue . setDisplay(d))
+      || (exists slot: Slot . requestRetrieval(slot))
+      || emergencyPressed
+      || emergencyReleased
+    )
+  ]
+  X(
+    occupancy, position, x_s, y_s, z_s,
+    pickup_slot, place_slot, waiting, saved_occupancy,
+    mode, prevMode
+  )
+)
