@@ -1,12 +1,14 @@
 nu X(
   position: Position = pos(0,0,0),
   motorState: Axis -> MotorState = (lambda a: Axis . Stop),
+  readyToEngage: Bool = false,
   readyToDisengage: Bool = false
 ) . (
 
-  [disengageGripper] val(!readyToDisengage) &&
-
-  (forall p: Position . [gridReached(p)] X(p, motorState, readyToDisengage)) &&
+  [engageGripper] val(readyToEngage) &&
+  [disengageGripper] val(readyToDisengage) &&
+ 
+  (forall p: Position . [gridReached(p)] X(p, motorState, readyToEngage, readyToDisengage)) &&
   (
     forall a: Axis . forall s: MotorState .
     [setMovement(movement(a, s))]
@@ -16,18 +18,19 @@ nu X(
           if(b == XAxis, if(a == XAxis, s, motorState(XAxis)),
           if(b == YAxis, if(a == YAxis, s, motorState(YAxis)),
                          if(a == ZAxis, s, motorState(ZAxis)))),
-        s == Stop
+        if(s == Stop, readyToEngage, false),
+        if(s == Stop, readyToDisengage, false)
       )
   ) &&
+
   (
-    forall b: Bool . [objectAtPickup(b)] X(position, motorState, !b)
+    forall b: Bool . [objectAtPickup(b)] X(position, motorState, b, !b)
   ) &&
 
   [
     !(
-      disengageGripper || (exists b: Bool . objectAtPickup(b)) || (exists p:
-      Position . gridReached(p)) || (exists a: Axis, m: MotorState .
-      setMovement(movement(a, m)))
+      (exists b: Bool . objectAtPickup(b)) || (exists p:
+      Position . gridReached(p)) || (exists a: Axis, m: MotorState . setMovement(movement(a, m)))
     )
-  ] X(position, motorState, readyToDisengage)
+  ] X(position, motorState, readyToEngage, readyToDisengage)
 )

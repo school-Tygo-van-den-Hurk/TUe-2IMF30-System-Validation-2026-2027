@@ -1,3 +1,9 @@
+nu X(
+  occupancy: FSet(Slot) = {},
+  position: Position = pos(0,0,0),
+  holding: Held = Nothing
+) . (
+
   (val(#occupancy >= slotAmount) =>
     [requestStorage] (
       nu Z . mu Y . (
@@ -10,5 +16,46 @@
     )
   ) &&
 
+  (forall p: Position . [gridReached(p)] X(occupancy, p, holding)) &&
 
+  (val(holding == Nothing && position == pos(0,0,0)) =>
+    [engageGripper] X(occupancy, position, Pickup)
+  ) &&
+  (
+    forall s: Slot .
+    val(
+      s < slotAmount && s in occupancy && holding == Nothing &&
+      position == slotPosition(s)
+    ) => [engageGripper] X(occupancy - {s}, position, item(s))
+  ) &&
 
+  (val(holding != Nothing && position == pos(0,0,0)) =>
+    [disengageGripper] X(occupancy, position, Nothing)
+  ) &&
+  (
+    forall s: Slot . val(
+      s < slotAmount && !(s in occupancy) && holding != Nothing &&
+      position == slotPosition(s)
+    ) => [disengageGripper] X(occupancy + {s}, position, Nothing)
+  ) &&
+
+  (
+    forall s: Slot . val(s < slotAmount && position == slotPosition(s)) =>
+      [objectAtPickup(false)] X(
+        if(holding == Nothing, occupancy - {s}, occupancy),
+        position,
+        holding
+      )
+  ) &&
+  (
+    val(position == pos(0,0,0)) =>
+      [objectAtPickup(false)] X(occupancy, position, holding)
+  ) &&
+
+  [
+    !(
+      objectAtPickup(false) || engageGripper ||
+      disengageGripper || (exists p: Position . gridReached(p))
+    )
+  ] X(occupancy, position, holding)
+)

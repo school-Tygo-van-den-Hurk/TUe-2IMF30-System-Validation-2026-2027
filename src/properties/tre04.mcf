@@ -1,82 +1,75 @@
 nu X(
   occupancy: FSet(Slot) = {},
   position: Position = pos(0,0,0),
-  holding: Held = Nothing,
-  readyToDisengage: Bool = false,
-  readyToEngage: Bool = false
+  holding: Held = Nothing
 ) . (
 
-  (val(position == pos(0,0,0) && #occupancy < slotAmount && readyToEngage) => 
-    [engageGripper] nu Z(p1: Position = position) . mu Y(p2: Position = p1) . (
-      <true> true &&
-      [disengageGripper] false &&
-      (
-        [objectAtPickup(false)] 
-        exists s: Slot . 
-        val((s < slotAmount && p2 == slotPosition(s)) || p2 == pos(0,0,0)) 
-      ) &&
-      (forall p: Position . [gridReached(p)] Y(p)) &&
-      [emergencyPressed | clearHandoff] Z(p2) &&
-      [!(
-        objectAtPickup(false) ||
-        disengageGripper ||
-        (exists p: Position . gridReached(p)) ||
-        emergencyPressed || clearHandoff
-      )] Y(p2)
+  (val(position == pos(0,0,0) && #occupancy < slotAmount) => 
+    [engageGripper] (
+      nu Z(p1: Position = position) .
+        mu Y(p2: Position = p1) . (
+          <true> true &&
+          [disengageGripper] false &&
+          (
+            [objectAtPickup(false)] 
+              exists s: Slot . 
+              val( 
+                (s < slotAmount && p2 == slotPosition(s))
+                || p2 == pos(0,0,0) 
+              ) 
+          ) &&
+          (forall p: Position . [gridReached(p)] Y(p)) &&
+          [emergencyPressed || clearHandoff] Z(p2) &&
+          [!(
+            objectAtPickup(false) ||
+            disengageGripper ||
+            (exists p: Position . gridReached(p)) ||
+            emergencyPressed || clearHandoff
+          )] Y(p2)
+        )
     )
   ) &&
 
-  (
-    forall p: Position . [gridReached(p)]
-    X(occupancy, p, holding, readyToDisengage, readyToEngage)
-  ) &&
+  (forall p: Position . [gridReached(p)] X(occupancy, p, holding)) &&
 
-  [objectAtPickup(true)] X(occupancy, position, holding, false, true) &&
-
-  (
-    forall a: Axis, m: MotorState .
-    [setMovement(movement(a, m))] X(occupancy, position, holding, false, false)
-  ) &&
-
-  (val(holding == Nothing && position == pos(0,0,0) && readyToEngage) =>
-    [engageGripper]
-    X(occupancy, position, Pickup, readyToDisengage, readyToEngage)
+  (val(holding == Nothing && position == pos(0,0,0)) =>
+    [engageGripper] X(occupancy, position, Pickup)
   ) &&
   (
-    forall s: Slot . val(
+    forall s: Slot .
+    val(
       s < slotAmount && s in occupancy && holding == Nothing &&
-      position == slotPosition(s) && readyToEngage
-    ) =>
-      [engageGripper] 
-      X(occupancy - {s}, position, item(s), readyToDisengage, readyToDisengage)
+      position == slotPosition(s)
+    ) => [engageGripper] X(occupancy - {s}, position, item(s))
   ) &&
 
-  (val(holding != Nothing && position == pos(0,0,0) && readyToDisengage) =>
-    [disengageGripper]
-    X(occupancy, position, Nothing, readyToDisengage, readyToEngage)
+  (val(holding != Nothing && position == pos(0,0,0)) =>
+    [disengageGripper] X(occupancy, position, Nothing)
   ) &&
   (
     forall s: Slot . val(
       s < slotAmount && !(s in occupancy) && holding != Nothing &&
-      position == slotPosition(s) && readyToDisengage
-    ) =>
-    [disengageGripper] 
-    X(occupancy + {s}, position, Nothing, readyToDisengage, readyToEngage)
+      position == slotPosition(s)
+    ) => [disengageGripper] X(occupancy + {s}, position, Nothing)
   ) &&
 
   (
     forall s: Slot . val(s < slotAmount && position == slotPosition(s)) =>
-    [objectAtPickup(false)] X(
-      if(holding == Nothing, occupancy - {s}, occupancy), position, 
-      holding, true, false
-    )
+      [objectAtPickup(false)] X(
+        if(holding == Nothing, occupancy - {s}, occupancy),
+        position,
+        holding
+      )
+  ) &&
+  (
+    val(position == pos(0,0,0)) =>
+      [objectAtPickup(false)] X(occupancy, position, holding)
   ) &&
 
   [
     !(
-      objectAtPickup(true) || objectAtPickup(false) || engageGripper ||
+      objectAtPickup(false) || engageGripper ||
       disengageGripper || (exists p: Position . gridReached(p))
-      || (exists a: Axis, m: MotorState . setMovement(movement(a, m)))
     )
-  ] X(occupancy, position, holding, readyToDisengage, readyToEngage)
+  ] X(occupancy, position, holding)
 )

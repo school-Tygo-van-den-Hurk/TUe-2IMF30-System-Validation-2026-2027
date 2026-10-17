@@ -18,6 +18,5 @@ nu X(
       )
   ) &&
 
-  [!((exists a: Axis, s: MotorState . setMovement(movement(a, s)))) ]
-    X(motorState)
+  [!(exists a: Axis, s: MotorState . setMovement(movement(a, s)))] X(motorState)
 )

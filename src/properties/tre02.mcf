@@ -1,1 +1,46 @@
-% TODO
+nu X(
+  position: Position = pos(0,0,0),
+  holding: Held = Nothing
+) . (
+  (
+    val(
+      holding == Nothing && (
+        position == pos(0,0,0) ||
+        (exists s: Slot . s < slotAmount && position == slotPosition(s))
+      )
+    ) => [objectAtPickup(true)] nu Z . mu Y . (
+      <true> true &&
+      (
+        forall a: Axis, m: MotorState .
+        [setMovement(movement(a, m))] false
+      ) &&
+      [emergencyPressed || clearHandoff] Z &&
+      [!(
+        engageGripper || emergencyPressed || clearHandoff
+      )] Y
+    )
+  ) &&
+
+  (forall p: Position . [gridReached(p)] X(p, holding)) &&
+
+  (
+    val(holding == Nothing && position == pos(0,0,0)) =>
+      [engageGripper] X(position, Pickup)
+  ) &&
+  (
+    forall s: Slot .
+    val(s < slotAmount && holding == Nothing && position == slotPosition(s)) =>
+      [engageGripper] X(position, item(s))
+  ) &&
+
+  (
+    val(holding != Nothing && (
+      position == pos(0,0,0) ||
+      (exists s: Slot . s < slotAmount && position == slotPosition(s))
+    )) =>
+      [disengageGripper] X(position, Nothing)
+  ) &&
+
+  [!(engageGripper || disengageGripper || (exists p: Position . gridReached(p)))] 
+  X(position, holding)
+)
