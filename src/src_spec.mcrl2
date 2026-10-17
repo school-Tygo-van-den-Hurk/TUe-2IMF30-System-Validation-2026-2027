@@ -14,7 +14,6 @@ sort
   MotorState = struct Forward | Backward | Stop;
   Movement = struct movement(axis : Axis, state : MotorState);
   Slot = Nat;
-  Mode = struct Idle | Working | Emergency;
   Position = struct pos(x : Int, y : Int, z: Int);
   Held = struct Nothing | Pickup | item(Slot);
 
