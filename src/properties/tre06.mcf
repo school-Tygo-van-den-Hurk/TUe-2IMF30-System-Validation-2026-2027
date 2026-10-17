@@ -1,9 +1,3 @@
-nu X(
-  occupancy: FSet(Slot) = {},
-  position: Position = pos(0,0,0),
-  holding: Held = Nothing
-) . (
-
   (val(#occupancy >= slotAmount) =>
     [requestStorage] (
       nu Z . mu Y . (
@@ -16,54 +10,5 @@ nu X(
     )
   ) &&
 
-  (forall p: Position . [gridReached(p)] X(occupancy, p, holding)) &&
 
-  (val(holding == Nothing && position == pos(0,0,0)) =>
-    [
-      objectAtPickup(true) . 
-      (!(exists m: Movement . setMovement(m)))* . 
-      engageGripper
-    ] X(occupancy, position, Pickup)
-  ) &&
-  (val(holding != Nothing && position == pos(0,0,0)) =>
-    [
-      disengageGripper
-    ] X(occupancy, position, Nothing)
-  ) &&
 
-  (
-    forall s: Slot .
-    val(
-      s < slotAmount && !(s in occupancy) && holding != Nothing &&
-      position == slotPosition(s)
-    ) =>
-      [disengageGripper] X(occupancy + {s}, position, Nothing)
-  ) &&
-  (
-    forall s: Slot . 
-    val(
-      s < slotAmount && s in occupancy && holding == Nothing  &&
-      position == slotPosition(s)
-    ) =>
-    [objectAtPickup(false)] X(occupancy - {s}, position, holding)
-  ) &&
-  (
-    forall s: Slot .
-    val(
-      s < slotAmount && s in occupancy && holding == Nothing &&
-      position == slotPosition(s)
-    ) =>
-      [
-        objectAtPickup(true) . 
-        (!(exists m: Movement . setMovement(m)))* . 
-        engageGripper
-      ] X(occupancy - {s}, position, item(s))
-  ) &&
-
-  [
-    !(
-      objectAtPickup(true) || objectAtPickup(false) || engageGripper ||
-      disengageGripper || (exists p: Position . gridReached(p))
-    )
-  ] X(occupancy, position, holding)
-)
