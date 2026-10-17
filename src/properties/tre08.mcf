@@ -1,23 +1,117 @@
-% solve report:(tre08:Property TRE08)
+% TODO: redo.
 nu X(
-  s_x: MotorState = Stop,
-  s_y: MotorState = Stop,
-  s_z: MotorState = Stop
-) . (
-  (
-    (val(s_x != Stop) => (val(s_y == Stop) && val(s_z == Stop))) &&
-    (val(s_y != Stop) => (val(s_x == Stop) && val(s_z == Stop))) &&
-    (val(s_z != Stop) => (val(s_x == Stop) && val(s_y == Stop)))
-  ) && 
+  motorX: MotorState = Stop,
+  motorY: MotorState = Stop,
+  motorZ: MotorState = Stop,
+  position: Position = pos(0, 0, 0),
+  objectSeen: Bool = false,
+  retrieving: Bool = false,
+  requested: Slot = 0,
+  holding: Held = Nothing
+) . 
+(
+  % Reached handoff with the requested item and handoff busy (item at pick up)
+  [objectAtPickup(true)] (
+    val(retrieving && holding == item(requested) && position == pos(0, 0, 0)) =>
 
-  forall a: Axis, s: MotorState . 
+      % wait for clearHandoff -> ask to clear the handoff point
+      mu WaitClearHandoff . (
+        <!emergencyPressed>true &&
+        [handoffCleared || objectAtPickup(true) || objectAtPickup(false)] false &&
+        [!(clearHandoff || emergencyPressed)] WaitClearHandoff &&
+        [clearHandoff]
+
+          % wait for handoffCleared -> wait for answer
+          mu WaitHandoffCleared . (
+            <!emergencyPressed>true &&
+            [clearHandoff || objectAtPickup(true) || objectAtPickup(false)] false &&
+            [!(handoffCleared || emergencyPressed)] WaitHandoffCleared &&
+            [handoffCleared]
+
+              % wait for objectAtPickup -> check the handoff point again
+              mu WaitObjectCheck . (
+                <!emergencyPressed>true &&
+                [clearHandoff || handoffCleared] false &&
+                [!(objectAtPickup(true) || objectAtPickup(false) || emergencyPressed)] WaitObjectCheck
+              )
+          )
+      )
+  ) &&
+
+
+
+  % Remember each motor's direction
+  forall a: Axis, s: MotorState .
     [setMovement(movement(a, s))] (
-      (val(a == XAxis) => X(s,   s_y, s_z)) &&
-      (val(a == YAxis) => X(s_x, s,   s_z)) &&
-      (val(a == ZAxis) => X(s_x, s_y, s))
-    ) 
-  &&
+      (val(a == XAxis) => X(s, motorY, motorZ, position, objectSeen, retrieving, requested, holding)) &&
+      (val(a == YAxis) => X(motorX, s, motorZ, position, objectSeen, retrieving, requested, holding)) &&
+      (val(a == ZAxis) => X(motorX, motorY, s, position, objectSeen, retrieving, requested, holding))
+    ) &&
 
-  [!(exists a: Axis, s: MotorState . setMovement(movement(a, s)))]
-  X(s_x, s_y, s_z)
+
+
+  % Update position on grid
+  [gridReached(XAxis)] X(motorX, motorY, motorZ, movePos(movement(XAxis, motorX), position), false, retrieving, requested, holding) &&
+  [gridReached(YAxis)] X(motorX, motorY, motorZ, movePos(movement(YAxis, motorY), position), false, retrieving, requested, holding) &&
+  [gridReached(ZAxis)] X(motorX, motorY, motorZ, movePos(movement(ZAxis, motorZ), position), false, retrieving, requested, holding) &&
+
+
+
+  % Remember if the sensor saw an object
+  [objectAtPickup(true)]  X(motorX, motorY, motorZ, position, true,  retrieving, requested, holding) &&
+  [objectAtPickup(false)] X(motorX, motorY, motorZ, position, false, retrieving, requested, holding) &&
+
+
+
+
+  % Remember that a retrieval was requested and for which slot
+  (forall s: Slot . [requestRetrieval(s)] X(motorX, motorY, motorZ, position, objectSeen, true, s, holding)) &&
+
+
+
+
+  % Update holding: object seen, then engage above slot s -> holding = item(s)
+  (
+    forall s: Slot .
+    val(objectSeen && s < slotAmount && position == routeEndpointFrom(pos(0, 0, 0), slotRoute(s))) =>
+      [engageGripper] X(motorX, motorY, motorZ, position, false, retrieving, requested, item(s))
+  ) &&
+
+
+
+
+  % Update holding: object seen, then engage at handoff -> holding = Pickup
+  (val(objectSeen && position == pos(0, 0, 0)) =>
+    [engageGripper] X(motorX, motorY, motorZ, position, false, retrieving, requested, Pickup)
+  ) &&
+
+
+
+
+  % Update holding: any other engage -> holding unchanged
+  (
+    (exists s: Slot . val(objectSeen && s < slotAmount && position == routeEndpointFrom(pos(0, 0, 0), slotRoute(s)))) ||
+    val(objectSeen && position == pos(0, 0, 0)) ||
+    [engageGripper] X(motorX, motorY, motorZ, position, false, retrieving, requested, holding)
+  ) &&
+
+
+
+
+  % Update holding: disengage -> holding = Nothing
+  [disengageGripper] X(motorX, motorY, motorZ, position, false, retrieving, requested, Nothing) &&
+
+
+
+
+  % Any other action -> nothing happens
+  [
+    !(
+      (exists a: Axis, s: MotorState . setMovement(movement(a, s))) ||
+      (exists a: Axis . gridReached(a)) ||
+      objectAtPickup(true) || objectAtPickup(false) ||
+      engageGripper || disengageGripper ||
+      (exists s: Slot . requestRetrieval(s))
+    )
+  ] X(motorX, motorY, motorZ, position, objectSeen, retrieving, requested, holding)
 )

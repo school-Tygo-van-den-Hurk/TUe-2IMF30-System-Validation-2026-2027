@@ -1,2 +1,0 @@
-% NOTE(Jorens): reachable parts are deadlock free.
-[true*]<true>true

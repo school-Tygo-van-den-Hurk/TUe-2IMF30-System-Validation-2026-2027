@@ -1,89 +1,73 @@
 nu X(
-  mode: Mode = Idle,
-  prevMode: Mode = Idle,
-  x_s: MotorState = Stop,
-  y_s: MotorState = Stop,
-  z_s: MotorState = Stop
-) .
-(
-  % X-Axis Check
-  (val(mode == Emergency && x_s != Stop) => 
-    (
-      % 1. Forbid any new movement commands (s != Stop) on XAxis
-      [
-        exists s: MotorState . 
-        (val(s != Stop) && setMovement(movement(XAxis, s)))
-      ] false 
-      && 
-      % 2. It must inevitably Stop
-      mu Y . ([!setMovement(movement(XAxis, Stop))]Y && <true>true)
+  occupancy: FSet(Slot) = {},
+  position: Position = pos(0,0,0),
+  holding: Held = Nothing
+) . (
+
+  (
+    forall s: Slot . val(
+      holding == Nothing && 
+      (s < slotAmount && position == slotPosition(s))
+    ) => ( 
+      [objectAtPickup(false)] false
+        % nu Z . mu Y . (
+        %   <true> true &&
+        %   (forall d: DisplayValue . [setDisplay(d)] val(d == reject(NothingToPick))) &&
+        %   [engageGripper || disengageGripper || objectAtPickup(false)] false &&
+        %   [emergencyPressed] Z &&
+        %   [!((exists d: DisplayValue . setDisplay(d)) || emergencyPressed)] Y
+        % )
     )
-  ) 
-  &&
+  ) &&
 
-  % Y-Axis Check
-  (val(mode == Emergency && y_s != Stop) => 
-    (
+  (forall p: Position . [gridReached(p)] X(occupancy, p, holding)) &&
+
+  (val(holding == Nothing && position == pos(0,0,0)) =>
+    [
+      objectAtPickup(true) . 
+      (!(exists m: Movement . setMovement(m)))* . 
+      engageGripper
+    ] X(occupancy, position, Pickup)
+  ) &&
+  (val(holding != Nothing && position == pos(0,0,0)) =>
+    [
+      disengageGripper
+    ] X(occupancy, position, Nothing)
+  ) &&
+
+  (
+    forall s: Slot .
+    val(
+      s < slotAmount && !(s in occupancy) && holding != Nothing &&
+      position == routeEndpointFrom(pos(0,0,0), slotRoute(s))
+    ) =>
+      [disengageGripper] X(occupancy + {s}, position, Nothing)
+  ) &&
+  (
+    forall s: Slot . 
+    val(
+      s < slotAmount && s in occupancy && holding == Nothing  &&
+      position == routeEndpointFrom(pos(0,0,0), slotRoute(s))
+    ) =>
+    [objectAtPickup(false)] X(occupancy - {s}, position, holding)
+  ) &&
+  (
+    forall s: Slot .
+    val(
+      s < slotAmount && s in occupancy && holding == Nothing &&
+      position == routeEndpointFrom(pos(0,0,0), slotRoute(s))
+    ) =>
       [
-        exists s: MotorState . 
-        (val(s != Stop) && setMovement(movement(YAxis, s)))
-      ] false 
-      && 
-      mu Y . ([!setMovement(movement(YAxis, Stop))]Y && <true>true)
-    )
-  )
-  &&
-
-  % Z-Axis Check
-  (val(mode == Emergency && z_s != Stop) => 
-    (
-      [
-        exists s: MotorState .
-        (val(s != Stop) && setMovement(movement(ZAxis, s)))
-      ] false 
-      && 
-      mu Y . ([!setMovement(movement(ZAxis, Stop))]Y && <true>true)
-    )
-  )
-  &&
-
-  (
-    forall s: MotorState .
-    [setMovement(movement(XAxis, s))] X(mode, mode, s, y_s, z_s)
-  ) &&
-  (
-    forall s: MotorState . 
-    [setMovement(movement(YAxis, s))] X(mode, mode, x_s, s, z_s)
-  ) &&
-  (
-    forall s: MotorState .
-    [setMovement(movement(ZAxis, s))] X(mode, mode, x_s, y_s, s)
-  ) &&
-
-  [emergencyPressed] X(Emergency, mode, x_s, y_s, z_s) &&
-  [emergencyReleased] (
-    val(mode == Emergency) => X(prevMode, prevMode, x_s, y_s, z_s)
-  ) &&
-  (
-    val(mode == Idle) => 
-      [requestStorage] X(Working, prevMode, x_s, y_s, z_s) &&
-      (forall s: Slot . [requestRetrieval(s)] X(Working, prevMode, x_s, y_s, z_s))
-  ) &&
-  (
-    val(mode == Working) => 
-      (forall s: Slot      . [setDisplay(complete(s))] X(Idle, prevMode, x_s, y_s, z_s)) &&
-      (forall r: Rejection . [setDisplay(reject(r))] X(Idle, prevMode, x_s, y_s, z_s))
+        objectAtPickup(true) . 
+        (!(exists m: Movement . setMovement(m)))* . 
+        engageGripper
+      ] X(occupancy - {s}, position, item(s))
   ) &&
 
   [
     !(
-      (exists a: Axis, s: MotorState . setMovement(movement(a, s))) ||
-      emergencyPressed || 
-      emergencyReleased || 
-      requestStorage || 
-      (exists s: Slot . requestRetrieval(s)) || 
-      (exists d: DisplayValue . setDisplay(d))
+      objectAtPickup(true) || objectAtPickup(false) || engageGripper ||
+      disengageGripper || (exists p: Position . gridReached(p))
     )
-  ] X(mode, prevMode, x_s, y_s, z_s)
+  ] X(occupancy, position, holding)
 )
-

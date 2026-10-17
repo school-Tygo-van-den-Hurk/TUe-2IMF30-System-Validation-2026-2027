@@ -1,32 +1,23 @@
-nu X(mode: Mode = Idle, prevMode: Mode = Idle) .
-(
+nu X(
+  motorState: Axis -> MotorState = (lambda a: Axis . Stop)
+) .
   (
-    val(mode == Emergency) => 
-      [engageGripper + disengageGripper]false
+    forall a1: Axis . val(motorState(a1) != Stop) => 
+      (forall a2: Axis . val(a1 != a2) => val(motorState(a2) == Stop))
   ) &&
 
-  [emergencyPressed] X(Emergency, mode) &&
-  [emergencyReleased] (
-    val(mode == Emergency) => X(prevMode, prevMode)
-  ) &&
   (
-    val(mode == Idle) => 
-      [requestStorage] X(Working, prevMode) &&
-      (forall s: Slot . [requestRetrieval(s)] X(Working, prevMode))
-  ) &&
-  (
-    val(mode == Working) => 
-      (forall s: Slot      . [setDisplay(complete(s))] X(Idle, prevMode)) &&
-      (forall r: Rejection . [setDisplay(reject(r))] X(Idle, prevMode))
+    forall a: Axis . forall s: MotorState .
+    [setMovement(movement(a, s))]
+      X(
+        isEmergency,
+        lambda b: Axis . 
+          if(b == XAxis, if(a == XAxis, s, motorState(XAxis)),
+          if(b == YAxis, if(a == YAxis, s, motorState(YAxis)),
+                         if(a == ZAxis, s, motorState(ZAxis))))
+      )
   ) &&
 
-  [
-    !(
-      emergencyPressed || 
-      emergencyReleased || 
-      requestStorage || 
-      (exists s: Slot . requestRetrieval(s)) || 
-      (exists d: DisplayValue . setDisplay(d))
-    )
-  ] X(mode, prevMode)
+  [!((exists a: Axis, s: MotorState . setMovement(movement(a, s)))) ]
+    X(motorState)
 )

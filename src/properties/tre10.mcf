@@ -1,38 +1,17 @@
-nu X(mode: Mode = Idle, prevMode: Mode = Idle) .
-(
-  (val(mode == Emergency) => 
-    (
-      forall a: Axis .
-      [
-        setMovement(movement(a, Forward)) +
-        setMovement(movement(a, Backward))
-      ]false
-    )
-  ) 
-  &&
-
-  [emergencyPressed] X(Emergency, mode) &&
-  [emergencyReleased] (
-    val(mode == Emergency) => X(prevMode, prevMode)
-  ) &&
+nu X(
+  position: Position = pos(0,0,0)
+) . (
   (
-    val(mode == Idle) => 
-      [requestStorage] X(Working, prevMode) &&
-      (forall s: Slot . [requestRetrieval(s)] X(Working, prevMode))
-  ) &&
-  (
-    val(mode == Working) => 
-      (forall s: Slot      . [setDisplay(complete(s))] X(Idle, prevMode)) &&
-      (forall r: Rejection . [setDisplay(reject(r))] X(Idle, prevMode))
+    [disengageGripper] 
+      (
+        exists s: Slot . val(s < slotAmount) && val(position == slotPosition(s))
+      ) || val(position == pos(0,0,0))
   ) &&
 
+  (forall p: Position . [gridReached(p)] X(p)) &&
   [
     !(
-      emergencyPressed || 
-      emergencyReleased || 
-      requestStorage || 
-      (exists s: Slot . requestRetrieval(s)) || 
-      (exists d: DisplayValue . setDisplay(d))
+      disengageGripper || (exists p: Position . gridReached(p))
     )
-  ] X(mode, prevMode)
+  ] X(position)
 )

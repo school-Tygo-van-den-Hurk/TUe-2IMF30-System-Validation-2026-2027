@@ -1,0 +1,19 @@
+nu X(isEmergency: Bool = false) .
+(
+  (val(isEmergency) => 
+    (
+      forall a: Axis . 
+      [setMovement(movement(a, Forward)) || setMovement(movement(a, Backward))]
+      false
+    )
+  ) &&
+
+  [emergencyPressed] X(true) &&
+  [emergencyReleased] X(false) &&
+  [
+    !(
+      emergencyPressed || emergencyReleased || engageGripper ||
+      disengageGripper
+    )
+  ] X(isEmergency)
+)

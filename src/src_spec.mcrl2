@@ -21,6 +21,7 @@ sort
 map
   oppositeState     : MotorState -> MotorState; % add to spec.
   slotRoute         : Slot -> List(Movement);
+  slotPosition      : Slot -> Position;
   reverseRoute      : List(Movement) -> List(Movement);
   routeEndpointFrom : Position # List(Movement) -> Position;
   movePos           : Movement # Position -> Position;
@@ -31,7 +32,7 @@ var
   m   : Movement;
   ms  : List(Movement);
   p   : Position;
-  s   : Nat; 
+  s   : Slot; 
   occ : FSet(Slot);
 
 eqn
@@ -61,6 +62,8 @@ eqn
       movement(YAxis, Forward), movement(ZAxis, Backward),
       movement(XAxis, Forward)
     ];
+
+  slotPosition(s) = routeEndpointFrom(pos(0,0,0), slotRoute(s));
 
   routeEndpointFrom(p, []) = p;
   routeEndpointFrom(p, m |> ms) = routeEndpointFrom(movePos(m, p), ms);
@@ -102,9 +105,9 @@ act
   engageGripper, disengageGripper, requestStorage, emergencyPressed,
   emergencyReleased, handoffCleared;
 
-  setMovement : Movement; gridReached : Axis; setEmergencyLight,
-  objectAtPickup, objectInGripper: Bool; requestRetrieval: Nat; setDisplay:
-  DisplayValue;
+  setMovement : Movement; gridReached : Position;
+  setEmergencyLight, objectAtPickup, objectInGripper: Bool;
+  requestRetrieval: Nat; setDisplay: DisplayValue;
 
   s_armEmergency, r_armEmergency, comm_armEmergency,
   s_armRecovery, r_armRecovery, comm_armRecovery,
@@ -189,7 +192,8 @@ proc
           )
           +
           (
-            r_acceptRequest(slot) . setDisplay(accept(slot)) .
+            r_acceptRequest(slot) . 
+            setDisplay(accept(slot)) .
             WaitCompleted(slot)
           )
         )
@@ -235,18 +239,18 @@ proc
     (
       sum slot: Slot . (slot < slotAmount && slot in occupancy) ->
         (
-          r_requestPickupSlot(slot) . s_acceptRequest(slot) .
-          s_armMoveToSlot(slot) . r_armCompleted .
+          r_requestPickupSlot(slot) . s_armMoveToSlot(slot) . r_armCompleted .
           s_armRequestPickup . 
           (
             (
-              r_armCompleted . s_armRequestReturn(slot) . r_armCompleted .
-              StorageClearHandoff(occupancy, slot, NoRejection)
+              r_armCompleted . s_acceptRequest(slot) . s_armRequestReturn(slot)
+              . r_armCompleted . StorageClearHandoff(occupancy, slot, NoRejection)
             )
             +
             (
               r_armRejected(NothingToPick) . s_armRequestReturn(slot) .
-              r_armCompleted . StorageClearHandoff(occupancy, slot, SlotEmpty)
+              r_armCompleted . s_rejectRequest(NothingToPick) .
+              StorageController(occupancy - {slot})
             )
           )
         )
@@ -299,77 +303,77 @@ proc
     );
 
 
-  ArmFollowRoute(route: List(Movement)) =
+  ArmFollowRoute(route: List(Movement), position: Position) =
     (route == []) ->
       (
-        s_armCompleted . ArmController
+        s_armCompleted . ArmController(position)
         +
-        r_armEmergency . r_armRecovery . ArmFollowRoute(route)
+        r_armEmergency . r_armRecovery . ArmFollowRoute(route, position)
       )
     <>
       (
         (
-          r_armEmergency . r_armRecovery . ArmFollowRoute(route)
+          r_armEmergency . r_armRecovery . ArmFollowRoute(route, position)
         )
         +
         (
           r_opAllowed . setMovement(head(route)) . s_opDone .
           (
-            gridReached(axis(head(route))) .
+            gridReached(movePos(head(route), position)) .
             setMovement(movement(axis(head(route)), Stop)) .
-            ArmFollowRoute(tail(route))
+            ArmFollowRoute(tail(route), movePos(head(route), position))
             +
             r_armEmergency .
             setMovement(movement(axis(head(route)), Stop)) .
             r_armRecovery .
-            ArmFollowRoute(route)
+            ArmFollowRoute(route, position)
           )
         )
       );
 
-  ArmEngage = 
+  ArmEngage(position: Position) = 
     (
-      r_armEmergency . r_armRecovery . ArmEngage
+      r_armEmergency . r_armRecovery . ArmEngage(position)
     )
     +
     (
-      r_opAllowed . engageGripper . s_opDone . s_armCompleted . ArmController
+      r_opAllowed . engageGripper . s_opDone . s_armCompleted . ArmController(position)
     );
 
-  ArmDisengage = 
+  ArmDisengage(position: Position) = 
     (
-      r_armEmergency . r_armRecovery . ArmDisengage
+      r_armEmergency . r_armRecovery . ArmDisengage(position)
     )
     +
     (
-      r_opAllowed . disengageGripper . s_opDone . s_armCompleted . ArmController
+      r_opAllowed . disengageGripper . s_opDone . s_armCompleted . ArmController(position)
     );
 
-  ArmController = 
+  ArmController(position: Position) = 
     (
-      r_armEmergency . r_armRecovery . ArmController
+      r_armEmergency . r_armRecovery . ArmController(position)
     )
     +
     (
-      sum s: Slot . r_armMoveToSlot(s). ArmFollowRoute(slotRoute(s))
+      sum s: Slot . r_armMoveToSlot(s). ArmFollowRoute(slotRoute(s), position)
     )
     +
     (
       sum s: Slot . r_armRequestReturn(s) .
-      ArmFollowRoute(reverseRoute(slotRoute(s)))
+      ArmFollowRoute(reverseRoute(slotRoute(s)), position)
     )
     +
     (
       sum s: Slot . r_armRequestPickup . 
       (
         (
-          objectAtPickup(true) . ArmEngage
+          objectAtPickup(true) . ArmEngage(position)
         )
         +
         (
           objectAtPickup(false) . 
           s_armRejected(NothingToPick) . 
-          ArmController
+          ArmController(position)
         )
       )
     ) 
@@ -380,11 +384,11 @@ proc
         (
           objectAtPickup(true) .
           s_armRejected(if(b, SlotBusy, HandoffBusy)) .
-          ArmController
+          ArmController(position)
         )
         +
         (
-          objectAtPickup(false) . ArmDisengage
+          objectAtPickup(false) . ArmDisengage(position)
         )
       )
     );
@@ -425,7 +429,7 @@ init
       },
       (
         EmergencyController(false) || UserInterface || StorageController({}) 
-        || ArmController
+        || ArmController(pos(0,0,0))
       )
     )
   );
