@@ -1,6 +1,6 @@
 nu X(
   motorState: Axis -> MotorState = (lambda a: Axis . Stop)
-) .
+) . (
   (
     forall a1: Axis . val(motorState(a1) != Stop) => 
       (forall a2: Axis . val(a1 != a2) => val(motorState(a2) == Stop))
@@ -10,7 +10,6 @@ nu X(
     forall a: Axis . forall s: MotorState .
     [setMovement(movement(a, s))]
       X(
-        isEmergency,
         lambda b: Axis . 
           if(b == XAxis, if(a == XAxis, s, motorState(XAxis)),
           if(b == YAxis, if(a == YAxis, s, motorState(YAxis)),
