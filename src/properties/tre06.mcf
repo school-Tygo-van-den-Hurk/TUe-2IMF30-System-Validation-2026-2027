@@ -24,19 +24,21 @@ nu X(
   (
     forall s: Slot .
     val(
-      s < slotAmount && s in occupancy && holding == Nothing &&
-      position == slotPosition(s)
+      s < slotAmount && s in occupancy && position == slotPosition(s) &&
+      holding == Nothing
     ) => [engageGripper] X(occupancy - {s}, position, item(s))
   ) &&
-
-  (val(holding != Nothing && position == pos(0,0,0)) =>
+  (val(position == pos(0,0,0) && holding != Nothing) =>
     [disengageGripper] X(occupancy, position, Nothing)
   ) &&
   (
-    forall s: Slot . val(
-      s < slotAmount && !(s in occupancy) && holding != Nothing &&
-      position == slotPosition(s)
-    ) => [disengageGripper] X(occupancy + {s}, position, Nothing)
+    forall s: Slot .
+    val(s < slotAmount && position == slotPosition(s) && holding != Nothing) =>
+      [disengageGripper] X(
+        if(!(s in occupancy) && #occupancy < slotAmount, occupancy + {s}, occupancy),
+        position,
+        Nothing
+      )
   ) &&
 
   (
