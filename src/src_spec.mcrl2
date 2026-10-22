@@ -92,10 +92,10 @@ act
   s_armRecovery, r_armRecovery, comm_armRecovery,
   s_requestStoreSlot, r_requestStoreSlot, comm_requestStoreSlot,
   s_operationCompleted, r_operationCompleted, comm_operationCompleted,
-  s_requestClearHandoff, r_requestClearHandoff, comm_requestClearHandoff,
+  s_handoffBusy, r_handoffBusy, comm_handoffBusy,
   s_opAllowed, r_opAllowed, comm_opAllowed,
   s_opDone, r_opDone, comm_opDone,
-  s_handoffCleared, r_handoffCleared, comm_handoffCleared;
+  s_handoffClear, r_handoffClear, comm_handoffClear;
   s_armCompleted, r_armCompleted, comm_armCompleted;
   s_armRejected, r_armRejected, comm_armRejected,
   s_rejectRequest, r_rejectRequest, comm_rejectRequest: Rejection;
@@ -155,7 +155,7 @@ proc
     )
     +
     (
-      r_requestClearHandoff . setDisplay(reject(HandoffBusy)) . handoffCleared . s_handoffCleared . UserInterface
+      r_handoffBusy . setDisplay(reject(HandoffBusy)) . handoffCleared . s_handoffClear . UserInterface
     );
 
   WaitCompleted(slot: Slot) =
@@ -164,7 +164,7 @@ proc
     )
     +
     (
-      r_requestClearHandoff . clearHandoff . setDisplay(reject(HandoffBusy)) . handoffCleared . s_handoffCleared . WaitCompleted(slot)
+      r_handoffBusy . clearHandoff . setDisplay(reject(HandoffBusy)) . handoffCleared . s_handoffClear . WaitCompleted(slot)
     );
 
   StorageClearHandoff(
@@ -181,8 +181,8 @@ proc
       )
       +
       (
-        r_armRejected(HandoffBusy) . s_requestClearHandoff .
-        r_handoffCleared . StorageClearHandoff(occupancy, slot, rejection)
+        r_armRejected(HandoffBusy) . s_handoffBusy .
+        r_handoffClear . StorageClearHandoff(occupancy, slot, rejection)
       )
     );
 
@@ -332,7 +332,7 @@ init
       setDisplay, setEmergencyLight, emergencyPressed, emergencyReleased, clearHandoff, handoffCleared, comm_acceptRequest,
       comm_rejectRequest, comm_requestPickupSlot, comm_requestStoreSlot, comm_operationCompleted, comm_armMoveToSlot,
       comm_armEmergency, comm_armRecovery, comm_armRequestReturn, comm_armRequestPickup, comm_armRequestHandoff,
-      comm_armCompleted, comm_requestClearHandoff, comm_handoffCleared, comm_armRejected, comm_opAllowed, comm_opDone
+      comm_armCompleted, comm_handoffBusy, comm_handoffClear, comm_armRejected, comm_opAllowed, comm_opDone
     },
     comm(
       {
@@ -348,8 +348,8 @@ init
         s_armRequestReturn  |  r_armRequestReturn ->  comm_armRequestReturn,
         s_armRequestPickup  |  r_armRequestPickup ->  comm_armRequestPickup,
         s_armRequestHandoff | r_armRequestHandoff -> comm_armRequestHandoff,
-        s_requestClearHandoff | r_requestClearHandoff -> comm_requestClearHandoff,
-        s_handoffCleared | r_handoffCleared -> comm_handoffCleared,
+        s_handoffBusy | r_handoffBusy -> comm_handoffBusy,
+        s_handoffClear | r_handoffClear -> comm_handoffClear,
         s_armRejected    | r_armRejected -> comm_armRejected,
         s_opAllowed | r_opAllowed -> comm_opAllowed,
         s_opDone | r_opDone -> comm_opDone
