@@ -5,59 +5,35 @@ nu X(
 ) . (
 
   (val(#occupancy >= slotAmount) =>
-    [requestStorage] (
-      nu Z . mu Y . (
-        <true> true &&
-        (forall d: DisplayValue . [setDisplay(d)] val(d == reject(StorageFull))) &&
-        [engageGripper || disengageGripper || objectAtPickup(false)] false &&
-        [emergencyPressed] Z &&
-        [!((exists d: DisplayValue . setDisplay(d)) || emergencyPressed)] Y
-      )
+    [requestStorage] nu Z . mu Y . (
+      <true> true &&
+      (forall d: DisplayValue . [setDisplay(d)] val(d == reject(StorageFull))) &&
+      [engageGripper || disengageGripper || objectAtPickup(false)] false &&
+      [emergencyPressed] Z &&
+      [!((exists d: DisplayValue . setDisplay(d)) || emergencyPressed)] Y
     )
   ) &&
 
   (forall p: Position . [gridReached(p)] X(occupancy, p, holding)) &&
 
-  (val(holding == Nothing && position == pos(0,0,0)) =>
-    [engageGripper] X(occupancy, position, Pickup)
+  (val(holding == Nothing && position == pos(0,0,0)) => [engageGripper] X(occupancy, position, Pickup)) &&
+  (forall s: Slot . val(s < slotAmount && s in occupancy && position == slotPosition(s) && holding == Nothing) 
+    => [engageGripper] X(occupancy - {s}, position, item(s))
   ) &&
-  (
-    forall s: Slot .
-    val(
-      s < slotAmount && s in occupancy && position == slotPosition(s) &&
-      holding == Nothing
-    ) => [engageGripper] X(occupancy - {s}, position, item(s))
-  ) &&
-  (val(position == pos(0,0,0) && holding != Nothing) =>
-    [disengageGripper] X(occupancy, position, Nothing)
-  ) &&
-  (
-    forall s: Slot .
-    val(s < slotAmount && position == slotPosition(s) && holding != Nothing) =>
-      [disengageGripper] X(
-        if(!(s in occupancy) && #occupancy < slotAmount, occupancy + {s}, occupancy),
-        position,
-        Nothing
-      )
-  ) &&
-
-  (
-    forall s: Slot . val(s < slotAmount && position == slotPosition(s)) =>
-      [objectAtPickup(false)] X(
-        if(holding == Nothing, occupancy - {s}, occupancy),
-        position,
-        holding
-      )
-  ) &&
-  (
-    val(position == pos(0,0,0)) =>
-      [objectAtPickup(false)] X(occupancy, position, holding)
-  ) &&
-
-  [
-    !(
-      objectAtPickup(false) || engageGripper ||
-      disengageGripper || (exists p: Position . gridReached(p))
+  (val(position == pos(0,0,0) && holding != Nothing) => [disengageGripper] X(occupancy, position, Nothing)) &&
+  (forall s: Slot . val(s < slotAmount && position == slotPosition(s) && holding != Nothing) =>
+    [disengageGripper] X(
+      if(!(s in occupancy) && #occupancy < slotAmount, occupancy + {s}, occupancy), position, Nothing
     )
-  ] X(occupancy, position, holding)
+  ) &&
+
+  (forall s: Slot . val(s < slotAmount && position == slotPosition(s)) =>
+    [objectAtPickup(false)] X(if(holding == Nothing, occupancy - {s}, occupancy), position, holding)
+  ) &&
+  (val(position == pos(0,0,0)) => [objectAtPickup(false)] X(occupancy, position, holding)) &&
+
+  [!(
+    objectAtPickup(false) || engageGripper ||
+    disengageGripper || (exists p: Position . gridReached(p))
+  )] X(occupancy, position, holding)
 )

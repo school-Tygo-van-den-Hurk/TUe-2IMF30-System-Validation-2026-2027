@@ -1,6 +1,7 @@
 nu X(isEmergency: Bool = false) .
 (
   (val(isEmergency) => [engageGripper + disengageGripper] false) &&
+
   [emergencyPressed] X(true) &&
   [emergencyReleased] X(false) &&
   [!(emergencyPressed || emergencyReleased || engageGripper || disengageGripper)]
