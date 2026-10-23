@@ -152,10 +152,6 @@ proc
             r_acceptRequest(slot) . setDisplay(accept(slot)) . WaitCompleted(slot)
           )
         )
-    )
-    +
-    (
-      r_handoffBusy . setDisplay(reject(HandoffBusy)) . handoffCleared . s_handoffClear . UserInterface
     );
 
   WaitCompleted(slot: Slot) =
