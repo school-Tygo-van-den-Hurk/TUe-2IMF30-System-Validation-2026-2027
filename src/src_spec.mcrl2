@@ -83,11 +83,12 @@ eqn
   (s < slotAmount) && (s in occ) -> find_empty(s, occ) = find_empty(s + 1, occ);
 
 act
+
   engageGripper, disengageGripper, requestStorage, emergencyPressed,
   emergencyReleased, clearHandoff, handoffCleared;
-  setMovement : Movement; gridReached : Position;
-  setEmergencyLight, objectAtPickup: Bool;
+  setMovement : Movement; gridReached : Position; setEmergencyLight, objectAtPickup: Bool;
   requestRetrieval: Slot; setDisplay: DisplayValue; 
+
   s_armEmergency, r_armEmergency, comm_armEmergency,
   s_armRecovery, r_armRecovery, comm_armRecovery,
   s_requestStoreSlot, r_requestStoreSlot, comm_requestStoreSlot,
@@ -160,7 +161,8 @@ proc
     )
     +
     (
-      r_handoffBusy . clearHandoff . setDisplay(reject(HandoffBusy)) . handoffCleared . s_handoffClear . WaitCompleted(slot)
+      r_handoffBusy . clearHandoff . setDisplay(reject(HandoffBusy)) .
+      handoffCleared . s_handoffClear . WaitCompleted(slot)
     );
 
   StorageClearHandoff(
@@ -194,8 +196,8 @@ proc
             )
             +
             (
-              r_armRejected(NothingToPick) . s_armRequestReturn(slot) . r_armCompleted . s_rejectRequest(NothingToPick) .
-              StorageController(occupancy - {slot})
+              r_armRejected(NothingToPick) . s_armRequestReturn(slot) . r_armCompleted .
+              s_rejectRequest(NothingToPick) . StorageController(occupancy - {slot})
             )
           )
         )
@@ -324,10 +326,11 @@ proc
 init
   allow(
     {
-      setMovement, gridReached, engageGripper, disengageGripper, objectAtPickup, requestStorage, requestRetrieval,
-      setDisplay, setEmergencyLight, emergencyPressed, emergencyReleased, clearHandoff, handoffCleared, comm_acceptRequest,
-      comm_rejectRequest, comm_requestPickupSlot, comm_requestStoreSlot, comm_operationCompleted, comm_armMoveToSlot,
-      comm_armEmergency, comm_armRecovery, comm_armRequestReturn, comm_armRequestPickup, comm_armRequestHandoff,
+      setMovement, gridReached, engageGripper, disengageGripper, objectAtPickup, requestStorage, 
+      requestRetrieval, setDisplay, setEmergencyLight, emergencyPressed, emergencyReleased,
+      clearHandoff, handoffCleared, comm_acceptRequest, comm_rejectRequest, comm_requestPickupSlot,
+      comm_requestStoreSlot, comm_operationCompleted, comm_armMoveToSlot, comm_armEmergency,
+      comm_armRecovery, comm_armRequestReturn, comm_armRequestPickup, comm_armRequestHandoff,
       comm_armCompleted, comm_handoffBusy, comm_handoffClear, comm_armRejected, comm_opAllowed, comm_opDone
     },
     comm(
