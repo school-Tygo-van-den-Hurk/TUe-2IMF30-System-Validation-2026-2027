@@ -86,8 +86,8 @@ act
   engageGripper, disengageGripper, requestStorage, emergencyPressed,
   emergencyReleased, clearHandoff, handoffCleared;
   setMovement : Movement; gridReached : Position;
-  setEmergencyLight, objectAtPickup, objectInGripper: Bool;
-  requestRetrieval: Nat; setDisplay: DisplayValue; 
+  setEmergencyLight, objectAtPickup: Bool;
+  requestRetrieval: Slot; setDisplay: DisplayValue; 
   s_armEmergency, r_armEmergency, comm_armEmergency,
   s_armRecovery, r_armRecovery, comm_armRecovery,
   s_requestStoreSlot, r_requestStoreSlot, comm_requestStoreSlot,
