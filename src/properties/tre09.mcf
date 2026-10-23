@@ -1,65 +1,17 @@
 nu X(
-  occupancy: FSet(Slot) = {},
-  position: Position = pos(0,0,0),
-  holding: Held = Nothing
+  position: Position = pos(0,0,0)
 ) . (
   (
-    forall s: Slot . val(
-      holding == Nothing && 
-      (s < slotAmount && position == slotPosition(s))
-    ) =>  
-    [objectAtPickup(false)] 
-    nu Z . mu Y . (
-      <true> true &&
-      (forall d: DisplayValue . [setDisplay(d)] val(d == reject(NothingToPick))) &&
-      [engageGripper || disengageGripper || objectAtPickup(false)] false &&
-      [emergencyPressed || clearHandoff] Z &&
-      [!((exists d: DisplayValue . setDisplay(d)) || emergencyPressed || clearHandoff)] Y
-    )
+    [disengageGripper] 
+      (
+        exists s: Slot . val(s < slotAmount) && val(position == slotPosition(s))
+      ) || val(position == pos(0,0,0))
   ) &&
 
-  (forall p: Position . [gridReached(p)] X(occupancy, p, holding)) &&
-
-  (val(holding == Nothing && position == pos(0,0,0)) =>
-    [engageGripper] X(occupancy, position, Pickup)
-  ) &&
-  (
-    forall s: Slot .
-    val(
-      s < slotAmount && s in occupancy && position == slotPosition(s) &&
-      holding == Nothing
-    ) => [engageGripper] X(occupancy - {s}, position, item(s))
-  ) &&
-  (val(position == pos(0,0,0) && holding != Nothing) =>
-    [disengageGripper] X(occupancy, position, Nothing)
-  ) &&
-  (
-    forall s: Slot .
-    val(s < slotAmount && position == slotPosition(s) && holding != Nothing) =>
-      [disengageGripper] X(
-        if(!(s in occupancy) && #occupancy < slotAmount, occupancy + {s}, occupancy),
-        position,
-        Nothing
-      )
-  ) &&
-
-  (
-    forall s: Slot . val(s < slotAmount && position == slotPosition(s)) =>
-      [objectAtPickup(false)] X(
-        if(holding == Nothing, occupancy - {s}, occupancy),
-        position,
-        holding
-      )
-  ) &&
-  (
-    val(position == pos(0,0,0)) =>
-      [objectAtPickup(false)] X(occupancy, position, holding)
-  ) &&
-
+  (forall p: Position . [gridReached(p)] X(p)) &&
   [
     !(
-      objectAtPickup(false) || engageGripper ||
       disengageGripper || (exists p: Position . gridReached(p))
     )
-  ] X(occupancy, position, holding)
+  ] X(position)
 )

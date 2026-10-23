@@ -1,15 +1,34 @@
 nu X(
+  isEmergency: Bool = false,
   motorState: Axis -> MotorState = (lambda a: Axis . Stop)
-) . (
+) .
+(
   (
-    forall a1: Axis . val(motorState(a1) != Stop) => 
-      (forall a2: Axis . val(a1 != a2) => val(motorState(a2) == Stop))
+    forall a: Axis . val(motorState(a) != Stop && isEmergency) =>
+      nu Z . (
+        mu Y . (
+          <emergencyReleased> true ||
+          (
+            <true> true &&
+            (
+              forall s: MotorState .
+              [setMovement(movement(a, s))] val(s == Stop) 
+            )&&
+            ([emergencyPressed || clearHandoff] Z) &&
+            [!(
+              (exists a1: Axis, s: MotorState . setMovement(movement(a1, s)))
+              || emergencyPressed || clearHandoff
+            )] Y
+          )
+        )
+      )
   ) &&
 
   (
     forall a: Axis . forall s: MotorState .
     [setMovement(movement(a, s))]
       X(
+        isEmergency,
         lambda b: Axis . 
           if(b == XAxis, if(a == XAxis, s, motorState(XAxis)),
           if(b == YAxis, if(a == YAxis, s, motorState(YAxis)),
@@ -17,5 +36,14 @@ nu X(
       )
   ) &&
 
-  [!(exists a: Axis, s: MotorState . setMovement(movement(a, s)))] X(motorState)
+  [emergencyPressed] X(true, motorState) &&
+  [emergencyReleased] X(false, motorState) &&
+
+  [
+    !(
+      (exists a: Axis, s: MotorState . setMovement(movement(a, s))) ||
+      emergencyPressed || emergencyReleased 
+    )
+  ] X(isEmergency, motorState)
 )
+

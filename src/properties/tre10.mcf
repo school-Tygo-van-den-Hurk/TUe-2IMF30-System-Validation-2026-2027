@@ -1,17 +1,21 @@
 nu X(
-  position: Position = pos(0,0,0)
+  motorState: Axis -> MotorState = (lambda a: Axis . Stop)
 ) . (
   (
-    [disengageGripper] 
-      (
-        exists s: Slot . val(s < slotAmount) && val(position == slotPosition(s))
-      ) || val(position == pos(0,0,0))
+    forall a1: Axis . val(motorState(a1) != Stop) => 
+      (forall a2: Axis . val(a1 != a2) => val(motorState(a2) == Stop))
   ) &&
 
-  (forall p: Position . [gridReached(p)] X(p)) &&
-  [
-    !(
-      disengageGripper || (exists p: Position . gridReached(p))
-    )
-  ] X(position)
+  (
+    forall a: Axis . forall s: MotorState .
+    [setMovement(movement(a, s))]
+      X(
+        lambda b: Axis . 
+          if(b == XAxis, if(a == XAxis, s, motorState(XAxis)),
+          if(b == YAxis, if(a == YAxis, s, motorState(YAxis)),
+                         if(a == ZAxis, s, motorState(ZAxis))))
+      )
+  ) &&
+
+  [!(exists a: Axis, s: MotorState . setMovement(movement(a, s)))] X(motorState)
 )

@@ -2,13 +2,14 @@ nu X(
   position: Position = pos(0,0,0),
   holding: Held = Nothing
 ) . (
+
   (
     val(
-      holding == Nothing && (
+      holding != Nothing && (
         position == pos(0,0,0) ||
         (exists s: Slot . s < slotAmount && position == slotPosition(s))
       )
-    ) => [objectAtPickup(true)] nu Z . mu Y . (
+    ) => [objectAtPickup(false)] nu Z . mu Y . (
       <true> true &&
       (
         forall a: Axis, m: MotorState .
@@ -16,7 +17,7 @@ nu X(
       ) &&
       [emergencyPressed || clearHandoff] Z &&
       [!(
-        engageGripper || emergencyPressed || clearHandoff
+        disengageGripper || emergencyPressed || clearHandoff
       )] Y
     )
   ) &&

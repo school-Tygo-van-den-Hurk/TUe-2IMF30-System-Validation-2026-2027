@@ -4,29 +4,18 @@ nu X(
   holding: Held = Nothing
 ) . (
 
-  (val(position == pos(0,0,0) && #occupancy < slotAmount) => 
-    [engageGripper] (
-      nu Z(p1: Position = position) .
-        mu Y(p2: Position = p1) . (
-          <true> true &&
-          [disengageGripper] false &&
-          (
-            [objectAtPickup(false)] 
-              exists s: Slot . 
-              val( 
-                (s < slotAmount && p2 == slotPosition(s))
-                || p2 == pos(0,0,0) 
-              ) 
-          ) &&
-          (forall p: Position . [gridReached(p)] Y(p)) &&
-          [emergencyPressed || clearHandoff] Z(p2) &&
-          [!(
-            objectAtPickup(false) ||
-            disengageGripper ||
-            (exists p: Position . gridReached(p)) ||
-            emergencyPressed || clearHandoff
-          )] Y(p2)
-        )
+  (
+    forall s: Slot . val(s < slotAmount && position == slotPosition(s)) => 
+    [engageGripper] nu Z(p1: Position = position) . mu Y(p2: Position = p1) . (
+      <true> true &&
+      [disengageGripper] false &&
+      ([objectAtPickup(false)] val(p2 == pos(0,0,0))) &&
+      (forall p: Position . [gridReached(p)] Y(p)) &&
+      [emergencyPressed || clearHandoff] Z(p2) &&
+      [!(
+        objectAtPickup(false) || disengageGripper || (exists p: Position .
+        gridReached(p)) || emergencyPressed || clearHandoff
+      )] Y(p2)
     )
   ) &&
 
