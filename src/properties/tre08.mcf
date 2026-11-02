@@ -8,9 +8,12 @@ nu X(
     [objectAtPickup(false)] nu Z . mu Y . (
       <true> true &&
       (forall d: DisplayValue . [setDisplay(d)] val(d == reject(NothingToPick))) &&
-      [engageGripper || disengageGripper || objectAtPickup(false)] false &&
+      (forall b: Bool . [objectAtPickup(b)] false) &&
       [emergencyPressed || clearHandoff] Z &&
-      [!((exists d: DisplayValue . setDisplay(d)) || emergencyPressed || clearHandoff)] Y
+      [!(
+        setDisplay(reject(NothingToPick)) || (exists b: Bool . objectAtPickup(false)) ||
+        emergencyPressed || clearHandoff
+      )] Y
     )
   ) &&
 
