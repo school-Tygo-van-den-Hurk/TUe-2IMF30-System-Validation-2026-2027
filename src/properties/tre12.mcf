@@ -6,5 +6,5 @@ nu X(isEmergency: Bool = false) .
 
   [emergencyPressed] X(true) &&
   [emergencyReleased] X(false) &&
-  [!(emergencyPressed || emergencyReleased || engageGripper || disengageGripper)] X(isEmergency)
+  [!(emergencyPressed || emergencyReleased)] X(isEmergency)
 )
