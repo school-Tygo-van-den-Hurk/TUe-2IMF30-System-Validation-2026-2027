@@ -8,6 +8,7 @@ nu X(
       nu Z . mu Y . (
         <emergencyReleased> true ||
         (
+          <true>true &&
           (forall s: MotorState . [setMovement(movement(a, s))] val(s == Stop)) &&
           ([emergencyPressed || clearHandoff] Z) &&
           [!(
