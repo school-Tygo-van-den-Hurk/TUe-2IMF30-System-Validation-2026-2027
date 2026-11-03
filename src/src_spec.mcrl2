@@ -17,6 +17,7 @@ map
   movePos           : Movement # Position -> Position;
   slotAmount        : Nat;
   find_empty        : Nat # FSet(Slot) -> Nat;
+  initMotorState    : Axis -> MotorState;
 
 var
   m   : Movement;
@@ -24,6 +25,7 @@ var
   p   : Position;
   s   : Slot; 
   occ : FSet(Slot);
+  a   : Axis;
 
 eqn
   
@@ -81,6 +83,8 @@ eqn
   (s >= slotAmount) -> find_empty(s, occ) = slotAmount;
   (s < slotAmount) && !(s in occ) -> find_empty(s, occ) = s;
   (s < slotAmount) && (s in occ) -> find_empty(s, occ) = find_empty(s + 1, occ);
+
+  initMotorState(a) = Stop;
 
 act
 
