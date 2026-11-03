@@ -5,9 +5,8 @@ nu X(
 ) . (
 
   (val(position == pos(0,0,0) && #occupancy < slotAmount) => 
-    [engageGripper] (
+    [objectAtPickup(true)] (
       nu Z(p1: Position = position) . mu Y(p2: Position = p1) . (
-        <true> true &&
         [disengageGripper] false &&
         (
           [objectAtPickup(false)] exists s: Slot . val( 
