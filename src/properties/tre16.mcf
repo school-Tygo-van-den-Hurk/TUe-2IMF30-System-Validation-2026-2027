@@ -4,15 +4,16 @@ nu X(
   holding: Held = Nothing
 ) . (
 
-  (val(#occupancy < slotAmount) => 
+  (val(#occupancy < slotAmount && holding == Nothing) => 
     [requestStorage] (
       nu Z(p1: Position = position) . mu Y(p2: Position = p1) . (
-        (forall b: Bool . [objectAtPickup(b)] val(p2 == pos(0,0,0) && holding == Nothing)) &&
+        (forall b: Bool . [objectAtPickup(b)] val(p2 == pos(0,0,0))) &&
         (forall p: Position . [gridReached(p)] Y(p)) &&
+        [disengageGripper || engageGripper] false &&
         [emergencyPressed || clearHandoff] Z(p2) &&
         [!(
-          (exists b: Bool . objectAtPickup(b)) || 
-          (exists p: Position . gridReached(p)) || emergencyPressed || clearHandoff
+          (exists b: Bool . objectAtPickup(b)) || (exists p: Position . gridReached(p)) ||
+          disengageGripper || engageGripper || emergencyPressed || clearHandoff
         )] Y(p2)
       )
     )
