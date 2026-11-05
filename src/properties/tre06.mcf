@@ -11,7 +11,7 @@ nu X(
       (forall d: DisplayValue . [setDisplay(d)] val(d == reject(SlotEmpty))) &&
       [engageGripper || disengageGripper || objectAtPickup(false)] false &&
       [emergencyPressed || clearHandoff] Z &&
-      [!((exists d: DisplayValue . setDisplay(d)) || emergencyPressed || clearHandoff)] Y
+      [!(setDisplay(reject(SlotEmpty)) || emergencyPressed || clearHandoff)] Y
     )
   ) &&
 
