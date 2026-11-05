@@ -1,4 +1,5 @@
 nu X(
+  motorState: Axis -> MotorState = initMotorState,
   readyToEngage: Bool = false,
   readyToDisengage: Bool = false
 ) . (
@@ -7,11 +8,22 @@ nu X(
  
   (forall a: Axis . forall s: MotorState .
     [setMovement(movement(a, s))]
-      X(if(s == Stop, readyToEngage, false), if(s == Stop, readyToDisengage, false))
+      X(
+        motorState[a -> s],
+        if(s == Stop, readyToEngage,    false),
+        if(s == Stop, readyToDisengage, false)
+      )
   ) &&
-  (forall b: Bool . [objectAtPickup(b)] X(b, !b)) &&
+  (forall b: Bool .
+    [objectAtPickup(b)]
+      X(
+        motorState,
+         b && (forall a: Axis . motorState(a) == Stop),
+        !b && (forall a: Axis . motorState(a) == Stop)
+      )
+  ) &&
 
   [!(
-    (exists b: Bool . objectAtPickup(b)) || (exists a: Axis, m: MotorState . setMovement(movement(a, m)))
-  )] X(readyToEngage, readyToDisengage)
+    (exists b: Bool . objectAtPickup(b)) || (exists m: Movement . setMovement(m))
+  )] X(motorState, readyToEngage, readyToDisengage)
 )
