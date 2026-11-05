@@ -10,7 +10,7 @@ nu X(
       (forall d: DisplayValue . [setDisplay(d)] val(d == reject(StorageFull))) &&
       [engageGripper || disengageGripper || objectAtPickup(false)] false &&
       [emergencyPressed || clearHandoff] Z &&
-      [!((exists d: DisplayValue . setDisplay(d)) || emergencyPressed || clearHandoff)] Y
+      [!(setDisplay(reject(StorageFull)) || emergencyPressed || clearHandoff)] Y
     )
   ) &&
 
