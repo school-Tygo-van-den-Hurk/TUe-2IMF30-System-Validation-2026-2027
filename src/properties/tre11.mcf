@@ -6,15 +6,13 @@ nu X(
   (
     forall a: Axis . val(motorState(a) != Stop && isEmergency) =>
       nu Z . mu Y . (
-        <emergencyReleased> true ||
-        (
-          <true>true &&
-          (forall s: MotorState . [setMovement(movement(a, s))] val(s == Stop)) &&
-          ([emergencyPressed || clearHandoff] Z) &&
-          [!(
-            (exists a1: Axis, s: MotorState . setMovement(movement(a1, s))) || emergencyPressed || clearHandoff
-          )] Y
-        )
+        <true>true &&
+        (forall s: MotorState . [setMovement(movement(a, s))] val(s == Stop)) &&
+        ([emergencyPressed || clearHandoff] Z) &&
+        [!(
+          (exists s: MotorState . setMovement(movement(a, s))) || 
+          emergencyReleased || emergencyPressed || clearHandoff
+        )] Y
       )
   ) &&
 
@@ -28,4 +26,3 @@ nu X(
     )
   ] X(isEmergency, motorState)
 )
-
