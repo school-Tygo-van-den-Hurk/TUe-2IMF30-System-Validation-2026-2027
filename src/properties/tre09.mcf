@@ -1,8 +1,10 @@
 nu X(
   position: Position = pos(0,0,0)
 ) . (
-  ([disengageGripper || engageGripper] (
-    exists s: Slot . val(s < slotAmount) && val(position == slotPosition(s))) || val(position == pos(0,0,0))
+  (
+    [disengageGripper || engageGripper] (
+      (exists s: Slot . val(s < slotAmount && position == slotPosition(s))) || val(position == pos(0,0,0))
+    )
   ) &&
 
   (forall p: Position . [gridReached(p)] X(p)) &&
