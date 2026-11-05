@@ -6,7 +6,6 @@ nu X(
   (
     forall a: Axis . val(motorState(a) != Stop && isEmergency) =>
       nu Z . mu Y . (
-        <true>true &&
         (forall s: MotorState . [setMovement(movement(a, s))] val(s == Stop)) &&
         ([emergencyPressed || clearHandoff] Z) &&
         [!(
