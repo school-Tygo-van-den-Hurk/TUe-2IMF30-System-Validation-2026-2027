@@ -9,8 +9,8 @@ nu X(
       <true> true &&
       (forall d: DisplayValue . [setDisplay(d)] val(d == reject(StorageFull))) &&
       [engageGripper || disengageGripper || objectAtPickup(false)] false &&
-      [emergencyPressed] Z &&
-      [!((exists d: DisplayValue . setDisplay(d)) || emergencyPressed)] Y
+      [emergencyPressed || clearHandoff] Z &&
+      [!((exists d: DisplayValue . setDisplay(d)) || emergencyPressed || clearHandoff)] Y
     )
   ) &&
 
