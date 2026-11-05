@@ -1,0 +1,44 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+PROPS=(
+    # "tre01"
+    # "tre02"
+    # "tre03"
+    # "tre04"
+    # "tre05"
+    # "tre06"
+    # "tre07"
+    # "tre08"
+    # "tre09"
+    # "tre10"
+    # "tre11"
+    # "tre12"
+    # "tre13"
+    # "tre14"
+    "tre15"
+    # "tre16"
+)
+
+for PROP in "${PROPS[@]}"; do
+    echo "============ $PROP =============="
+
+    VERBOSE=0
+
+    if [[ "$VERBOSE" == "1" ]]; then
+        lps2pbes -c -v -f ./src/properties/$PROP.mcf build/src_spec.lps temp.pbes
+    else
+        lps2pbes -c -v -f ./src/properties/$PROP.mcf build/src_spec.lps temp.pbes &> /dev/null
+    fi 
+    
+    if [[ "$VERBOSE" == "1" ]]; then
+        pbessolve -v -f build/src_spec.lps temp.pbes
+    else
+        RESULT=$(pbessolve -v -f build/src_spec.lps temp.pbes 2>&1)
+        if echo "$RESULT" | grep -q "^true$"; then
+            echo "Property $PROP holds ✔"
+        else
+            echo "Property $PROP violated"
+        fi
+    fi
+done

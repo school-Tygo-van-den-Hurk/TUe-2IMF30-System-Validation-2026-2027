@@ -1,0 +1,12 @@
+#!/usr/bin/bash
+
+output="props.txt"
+
+printf '' > $output
+
+for file in src/properties/*; do
+    [ -f "$file" ] || continue
+    name=$(basename "$file")
+    printf '\n%% ── START PROPERTY: %s ─────────────────────\n' "$name" >> "$output"
+    cat "$file" >> "$output"
+done
